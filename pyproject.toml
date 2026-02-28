@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "browser-cookie3>=0.20.1",
     "pycookiecheat>=0.8.0",
+    "pydantic>=2.12.5",
     "pygobject>=3.56.0",
     "pywebview>=6.1",
     "ytmusicapi>=1.11.5",
