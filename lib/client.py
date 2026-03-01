@@ -1,3 +1,4 @@
+from lib.data import AccountInfo
 from pycookiecheat import firefox_cookies, chrome_cookies
 import ytmusicapi
 from typing import Optional
@@ -53,60 +54,70 @@ def get_cookies_for_url(url: str) -> Optional[dict]:
         return None
 
 
-def auto_login() -> Optional[ytmusicapi.YTMusic]:
-    """Automates the login process by extracting cookies from Chrome and bypassing the auth type check.
+def auto_login(force_refresh: bool = False) -> Optional[ytmusicapi.YTMusic]:
+    """Automates login, with automatic fallback to fresh browser cookies if cached ones expire."""
 
-    If a cookie cache exists we prefer that data and avoid re-extraction from the browser.
-    """
+    cookies_dict = None
 
-    # 1. Try load from cache first
-    cookies_dict = load_cached_cookies()
+    # 1. Try load from cache unless we are forcing a refresh
+    if not force_refresh:
+        cookies_dict = load_cached_cookies()
+
+    # 2. Extract fresh cookies from the browser if no cache or forced refresh
     if cookies_dict is None:
-        # 2. Get the real cookies from your Mac
-        try:
-            url = "https://music.youtube.com"
-            cookies_dict = get_cookies_for_url(url)
-            if cookies_dict is None:
-                logging.error("[error] No cookies found for the specified URL.")
-                return None
-            # check if it is a dict instead of a list
-            if not isinstance(cookies_dict, dict):
-                logging.error("Unexpected cookie format: Expected a dict.")
-                return None
+        logging.info("Fetching fresh cookies from browser...")
+        url = "https://music.youtube.com"
+        cookies_dict = get_cookies_for_url(url)
 
-            save_cookies(cookies_dict)
-        except Exception as e:
-            logging.error(f"Cookie extraction failed: {e}")
+        if not cookies_dict or not isinstance(cookies_dict, dict):
+            logging.error("[error] Failed to get valid cookies from browser.")
             return None
+
+        save_cookies(cookies_dict)
 
     cookie_string = "; ".join([f"{k}={v}" for k, v in cookies_dict.items()])
 
-    # 2. Reconstruct the raw headers
-    # We add a fake Authorization header that contains the magic word 'SAPISIDHASH'
-    # This tricks determine_auth_type() into returning AuthType.BROWSER
+    # 3. Reconstruct the raw headers
     raw_headers = (
         "Accept: */*\n"
         "Accept-Language: en-US,en;q=0.9\n"
         "Content-Type: application/json\n"
         "X-Goog-AuthUser: 0\n"
         "x-origin: https://music.youtube.com\n"
-        "Authorization: SAPISIDHASH dummy_hash_to_bypass_check\n"  # <--- THE FIX
+        "Authorization: SAPISIDHASH dummy_hash_to_bypass_check\n"
         f"Cookie: {cookie_string}"
     )
 
     try:
-        # 3. Official setup call
-        # Now it will pass the internal check and identify as 'BROWSER'
-        ytmusicapi.setup(filepath="browser.json", headers_raw=raw_headers)
+        # 4. Official setup call
+        ytmusicapi.setup(filepath=BROWSER_JSON, headers_raw=raw_headers)
+        yt = ytmusicapi.YTMusic(BROWSER_JSON)
 
-        # 4. Initialize
-        yt = ytmusicapi.YTMusic("browser.json")
-
+        # 5. Verify authentication
         logging.info("Verifying authentication...")
-        yt.get_library_playlists(limit=1)
-        logging.info("[success] The check has been bypassed.")
+        account = AccountInfo.model_validate(yt.get_account_info())
+        logging.info(f"Logged in as: {account.account_name} ({account.channel_handle})")
+
+        playlists = yt.get_library_playlists(limit=1)
+        if not playlists:
+            logging.warning(
+                "Authentication succeeded but failed to fetch playlists. Check your session."
+            )
+            raise ValueError("Expired cookies")
+        logging.info("[success] Authentication verified.")
         return yt
 
     except Exception as e:
-        logging.error(f"Setup failed: {e}")
-        return None
+        # If verification fails and we haven't forced a refresh yet, the cache is stale.
+        if not force_refresh:
+            logging.warning(
+                f"Auth failed (cookies likely expired). Refreshing from browser... Error: {e}"
+            )
+            # Recursively call auto_login, but force it to grab fresh cookies
+            return auto_login(force_refresh=True)
+        else:
+            # If it fails even with fresh browser cookies, your actual browser session is logged out.
+            logging.error(
+                f"Setup failed even with fresh browser cookies. Please log into YT Music in Chrome/Firefox. Error: {e}"
+            )
+            return None
