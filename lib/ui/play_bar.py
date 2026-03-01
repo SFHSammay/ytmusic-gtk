@@ -228,9 +228,13 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
     next_btn = Gtk.Button(icon_name="media-skip-forward-symbolic")
     next_btn.add_css_class("flat")
 
+    # FIXED: Prevents UI jumping when time strings change length
     time_label = Gtk.Label()
     time_label.add_css_class("dim-label")
+    time_label.add_css_class("numeric")  # Uses tabular/monospaced figures
     time_label.set_margin_start(8)
+    time_label.set_width_chars(14)  # Wide enough for "99:99 / 99:99"
+    time_label.set_xalign(0.0)  # Pin text to the left side
 
     # -> Reactive Bindings: Play Controls
     state.playing.subscribe(
@@ -256,28 +260,39 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
     controls_box.append(next_btn)
     controls_box.append(time_label)
 
-    # Pack into our new CenterBox
+    # Pack into our CenterBox
     action_area.set_start_widget(controls_box)
 
     # ----------------------------------------------------
     # 2. SONG INFO & ACTIONS (Center)
     # ----------------------------------------------------
+
+    # FIXED: Wrap the center content in an Adw.Clamp for automatic max sizing
+    center_clamp = Adw.Clamp()
+    center_clamp.set_maximum_size(450)  # The container won't grow larger than 450px
+    center_clamp.set_tightening_threshold(300)
+
     center_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
     center_box.set_valign(Gtk.Align.CENTER)
 
-    # album art display widget. we keep Gtk.Image for easy icon handling
     album_art = Gtk.Image()
     album_art.set_pixel_size(48)
+    # Optional: Give the album art slightly rounded corners if your CSS supports it
+    album_art.add_css_class("card")
 
     text_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
     text_vbox.set_valign(Gtk.Align.CENTER)
+    # FIXED: Tell the text area to expand, pushing actions to the right
+    text_vbox.set_hexpand(True)
 
     title_label = Gtk.Label()
     title_label.set_halign(Gtk.Align.START)
+    title_label.set_xalign(0.0)  # Ensure long text stays left-aligned
     title_label.set_ellipsize(Pango.EllipsizeMode.END)
 
     subtitle_label = Gtk.Label()
     subtitle_label.set_halign(Gtk.Align.START)
+    subtitle_label.set_xalign(0.0)
     subtitle_label.set_ellipsize(Pango.EllipsizeMode.END)
     subtitle_label.add_css_class("dim-label")
 
@@ -286,7 +301,6 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
 
     actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
     actions_box.set_valign(Gtk.Align.CENTER)
-    actions_box.set_margin_start(16)
 
     dislike_btn = Gtk.Button(icon_name="face-sad-symbolic")
     dislike_btn.add_css_class("flat")
@@ -303,8 +317,9 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
     center_box.append(text_vbox)
     center_box.append(actions_box)
 
-    # Pack into our new CenterBox
-    action_area.set_center_widget(center_box)
+    # Set the box as the child of the Clamp, and the Clamp as the center widget
+    center_clamp.set_child(center_box)
+    action_area.set_center_widget(center_clamp)
 
     # -> Reactive Bindings: Song Info & Actions
     # album_art may be an icon name (string) or a URL to fetch; handle both.
