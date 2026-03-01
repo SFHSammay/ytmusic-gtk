@@ -1,3 +1,6 @@
+from typing import List
+from typing import Optional
+from lib.data import Thumbnail
 import threading
 import logging
 from gi.repository import Gtk, GdkPixbuf, GLib, Gio, Gdk
@@ -23,3 +26,13 @@ def load_image_async(image_widget: Gtk.Picture, url: str):
             logging.debug(f"Failed to load image {url}: {e}")
 
     threading.Thread(target=fetch, daemon=True).start()
+
+
+def load_thumbnail(image_widget: Gtk.Picture, thumbnails: Optional[List[Thumbnail]]):
+    """Helper to load a thumbnail image with error handling."""
+    if not thumbnails:
+        logging.debug("No thumbnails provided for thumbnail loading.")
+        return
+    url = thumbnails[-1].url  # Use the last thumbnail (highest resolution)
+
+    load_image_async(image_widget, url)

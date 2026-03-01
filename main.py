@@ -1,8 +1,9 @@
+from lib.ui.explore import ExplorePage
 from lib.ui.play_bar import PlayBar
 import ytmusicapi
 from reactivex.subject import BehaviorSubject
 from lib.types import YTMusicSubject
-from lib.ui.home import create_home_page
+from lib.ui.home import HomePage
 from lib.player import player
 import logging
 from typing import Optional
@@ -36,7 +37,7 @@ gi.require_version("Gst", "1.0")
 from gi.repository import Gtk, Adw, Gst, GLib, Pango, Gio, GdkPixbuf, Gdk
 
 # Assuming these are available in your project structure
-from lib.data import ExploreData
+# from lib.data import ExploreData
 from lib.client import auto_login
 
 log = logging.getLogger(__name__)
@@ -69,17 +70,14 @@ class YTMusicWindow(Adw.ApplicationWindow):
         # Build specific UI containers
         # self.home_box = self.create_home_page()
         self.stack.add_titled_with_icon(
-            create_home_page(yt_subject), "home", "Home", "go-home-symbolic"
+            HomePage(yt_subject), "home", "Home", "go-home-symbolic"
         )
-        self.explore_list = self.create_empty_list_page(
-            "explore", "Explore", "find-location-symbolic"
+        self.stack.add_titled_with_icon(
+            ExplorePage(yt_subject), "explore", "Explore", "location-symbolic"
         )
-
-        # self.build_play_bar()
 
         main_box.append(PlayBar())
 
-        # self.now_playing_title.set_label("Loading data...")
         self.fetch_data_async(yt_subject)
 
     def create_empty_list_page(
@@ -106,67 +104,11 @@ class YTMusicWindow(Adw.ApplicationWindow):
                 if not yt:
                     return
                 yt_subject.on_next(yt)
-                # raw_home = yt.get_home(limit=5)
-                # home_data = HomePage.validate_python(raw_home)
-
-                raw_explore = yt.get_explore()
-                explore_data = ExploreData.model_validate(raw_explore)
-
-                GLib.idle_add(self.populate_ui, explore_data)
             except Exception as e:
                 logging.error(f"Error fetching data: {e}")
 
         thread = threading.Thread(target=task, daemon=True)
         thread.start()
-
-    def populate_ui(self, explore_data: ExploreData) -> None:
-        # self.now_playing_title.set_label("Ready")
-
-        # --- Populate Home Page (Cards & Carousels) ---
-
-        # --- Populate Explore Page (Kept as list for contrast/example) ---
-        header_row = Adw.ActionRow(title="New Releases")
-        header_row.add_css_class("title")
-        header_row.set_activatable(False)
-        self.explore_list.append(header_row)
-
-        for release in explore_data.new_releases:
-            creator = release.artists[0].name if release.artists else "Unknown"
-            # row = Adw.ActionRow(
-            #     title=release.title, subtitle=f"{creator} • {release.type}"
-            # )
-
-            # play_btn = Gtk.Button(icon_name="media-playback-start-symbolic")
-            # play_btn.set_valign(Gtk.Align.CENTER)
-            # play_btn.add_css_class("circular")
-            # play_btn.add_css_class("flat")
-            # play_btn.connect("clicked", self.on_track_play_clicked, release.title)
-
-            # row.add_suffix(play_btn)
-            # self.explore_list.append(row)
-
-    # def on_track_play_clicked(
-    #     self, button: Optional[Gtk.Button], track_name: str
-    # ) -> None:
-    #     self.now_playing_title.set_label(track_name)
-    #     player.set_state(Gst.State.NULL)
-
-    #     sample_audio_url = (
-    #         "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-    #     )
-    #     player.set_property("uri", sample_audio_url)
-
-    #     player.set_state(Gst.State.PLAYING)
-    #     self.play_pause_btn.set_icon_name("media-playback-pause-symbolic")
-
-    # def on_play_pause_toggled(self, button: Gtk.Button) -> None:
-    #     player_state = player.get_state(0)[1]
-    #     if player_state != Gst.State.PLAYING:
-    #         player.set_state(Gst.State.PLAYING)
-    #         self.play_pause_btn.set_icon_name("media-playback-pause-symbolic")
-    #     else:
-    #         player.set_state(Gst.State.PAUSED)
-    #         self.play_pause_btn.set_icon_name("media-playback-start-symbolic")
 
 
 class YTMusicApp(Adw.Application):

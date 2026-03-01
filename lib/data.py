@@ -44,84 +44,8 @@ class Song(BaseMedia):
     played: str
 
 
-class NewVideo(BaseMedia):
-    playlist_id: Optional[str] = Field(None, alias="playlistId")
-    views: Optional[str] = None
-
-
-class TrendingItem(BaseMedia):
-    video_type: Optional[str] = Field(None, alias="videoType")
-    is_explicit: Optional[bool] = Field(None, alias="isExplicit")
-    playlist_id: Optional[str] = Field(None, alias="playlistId")
-    album: Optional[Album] = None
-    podcast: Optional[PodcastInfo] = None
-    views: Optional[str] = None
-    date: Optional[str] = None
-
-
-class TopEpisode(BaseMedia):
-    description: str
-    duration: str
-    video_type: str = Field(alias="videoType")
-    date: str
-    podcast: PodcastInfo
-
-
-class NewRelease(BaseMedia):
-    type: str  # e.g., "Album", "Single"
-    audio_playlist_id: Optional[str] = Field(None, alias="audioPlaylistId")
-    is_explicit: bool = Field(alias="isExplicit")
-
-
-class Trending(BaseModel):
-    playlist: str
-    items: List[TrendingItem]
-
-
-class MoodAndGenre(BaseModel):
-    title: str
-    params: str
-
-
-class ExploreData(BaseModel):
-    new_releases: List[NewRelease]
-    moods_and_genres: List[MoodAndGenre]
-    top_episodes: List[TopEpisode]
-    trending: Trending
-    new_videos: List[NewVideo]
-
-
 class History(BaseModel):
     songs: List[Song]
 
 
 Songs = TypeAdapter(List[Song])
-
-
-class HomeItemData(BaseMedia):
-    # Tracks & Quick Picks
-    playlist_id: Optional[str] = Field(None, alias="playlistId")
-    views: Optional[str] = None
-    video_type: Optional[str] = Field(None, alias="videoType")
-    is_explicit: Optional[bool] = Field(None, alias="isExplicit")
-    album: Optional[Album] = None
-
-    # Playlists & Mixes
-    description: Optional[str] = None
-    count: Optional[str] = None
-    # Note: Playlists often use 'author' instead of 'artists',
-    # but the data structure inside is identical to 'Artist'
-    author: Optional[List[Artist]] = None
-
-
-class HomeSectionData(BaseModel):
-    title: str
-    contents: List[HomeItemData]
-
-
-# Since the root of the Home data is a List (not a dictionary),
-# we use TypeAdapter just like you did for History.
-HomePageTypeAdapter = TypeAdapter(List[HomeSectionData])
-
-# Get type of HomePage for type hinting
-HomePageType = List[HomeSectionData]

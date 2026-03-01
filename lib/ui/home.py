@@ -1,8 +1,16 @@
-from lib.data import HomePageTypeAdapter
-from lib.data import HomeItemData
-from lib.data import HomeSectionData
+from reactivex import Subject
+from typing import Tuple
+from lib.data import Album
+from lib.data import Artist
+from lib.data import BaseMedia
+from reactivex import operators as ops
+
+# from lib.data import HomePageTypeAdapter
+# from lib.data import HomeItemData
+# from lib.data import HomeSectionData
 import threading
-from lib.data import HomePageType
+
+# from lib.data import HomePageType
 import logging
 import logging
 from lib.types import YTMusicSubject
@@ -11,6 +19,38 @@ from typing import Optional
 from gi.repository import Gtk, GLib, Adw, Pango
 from utils import load_image_async
 from reactivex.subject import BehaviorSubject
+from pydantic import TypeAdapter
+from pydantic import BaseModel, Field
+from typing import List, Optional
+
+
+class HomeItemData(BaseMedia):
+    # Tracks & Quick Picks
+    playlist_id: Optional[str] = Field(None, alias="playlistId")
+    views: Optional[str] = None
+    video_type: Optional[str] = Field(None, alias="videoType")
+    is_explicit: Optional[bool] = Field(None, alias="isExplicit")
+    album: Optional[Album] = None
+
+    # Playlists & Mixes
+    description: Optional[str] = None
+    count: Optional[str] = None
+    # Note: Playlists often use 'author' instead of 'artists',
+    # but the data structure inside is identical to 'Artist'
+    author: Optional[List[Artist]] = None
+
+
+class HomeSectionData(BaseModel):
+    title: str
+    contents: List[HomeItemData]
+
+
+# Since the root of the Home data is a List (not a dictionary),
+# we use TypeAdapter just like you did for History.
+HomePageTypeAdapter = TypeAdapter(List[HomeSectionData])
+
+# Get type of HomePage for type hinting
+HomePageType = List[HomeSectionData]
 
 
 def HomeItemCard(item: HomeItemData) -> Gtk.Box:
@@ -71,13 +111,16 @@ def HomeItemCard(item: HomeItemData) -> Gtk.Box:
     return card
 
 
-def HomeRow(section: HomeSectionData) -> Gtk.Box:
+# Leave HomeItemCard exactly as you have it!
+
+
+def HomeRow(section: HomeSectionData) -> tuple[Gtk.Box, Adw.Carousel]:
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
     header = Gtk.Label(label=section.title)
     header.set_halign(Gtk.Align.START)
     header.set_margin_start(12)
     header.set_margin_bottom(8)
-    header.add_css_class("title-2")  # Makes the text large and bold
+    header.add_css_class("title-2")
     box.append(header)
 
     carousel = Adw.Carousel()
@@ -93,13 +136,13 @@ def HomeRow(section: HomeSectionData) -> Gtk.Box:
     box.append(carousel)
     box.append(dots)
 
-    return box
+    # Return both so the parent can inject new items later
+    return box, carousel
 
 
-def create_home_page(
+def HomePage(
     yt_subject: YTMusicSubject,
 ) -> Gtk.ScrolledWindow:
-
     scrolled = Gtk.ScrolledWindow()
     scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
 
@@ -108,106 +151,127 @@ def create_home_page(
     home_box.set_margin_bottom(24)
     scrolled.set_child(home_box)
 
-    # State management for pagination
+    # --- STATE MANAGEMENT ---
     current_limit = 5
     is_loading = False
     current_yt_instance = None
 
-    def on_edge_reached(sw: Gtk.ScrolledWindow, pos: Gtk.PositionType):
-        nonlocal is_loading, current_limit, current_yt_instance
+    # Cache mapping: section.title -> (Gtk.Box, Adw.Carousel, current_item_count)
+    row_cache = {}
 
-        # Check if the edge we hit is the bottom
-        if pos == Gtk.PositionType.BOTTOM:
-            logging.info("Reached the bottom edge! Checking if we can load more...")
+    # Subject payload: (HomePageType data, is_reset boolean)
+    home_page_subject = BehaviorSubject[Tuple[HomePageType, bool]](([], True))
+    scroll_subject = Subject()
 
-            if is_loading:
-                logging.info("Already loading data, ignoring scroll.")
-                return
-            if not current_yt_instance:
-                logging.info("YT instance not ready, ignoring scroll.")
-                return
-
-            logging.info("Fetching more data...")
-            is_loading = True
-            current_limit += 5
-
-            # Fetch data in a background thread
-            threading.Thread(
-                target=fetch_home_data,
-                args=(current_yt_instance, current_limit),
-                daemon=True,
-            ).start()
-
-    # Connect directly to the ScrolledWindow, not its adjustment
-    scrolled.connect("edge-reached", on_edge_reached)
-
-    def update_ui(home: HomePageType):
+    # Explicit function to satisfy GLib.idle_add
+    def update_ui(home: HomePageType, is_reset: bool) -> bool:
         nonlocal is_loading
 
-        # Clear any existing widgets from the container (GTK4 style)
-        while True:
-            child = home_box.get_first_child()
-            if not child:
-                break
-            home_box.remove(child)
+        if is_reset:
+            # Wipe UI entirely only when switching accounts or reloading from scratch
+            while (child := home_box.get_first_child()) is not None:
+                home_box.remove(child)
+            row_cache.clear()
 
-        if len(home) == 0:
+        if len(home) == 0 and is_reset:
             is_loading = False
-            logging.info("YT Music instance is not available, showing error message.")
             error_label = Gtk.Label(
                 label="Failed to load data. Please check your login."
             )
             home_box.append(error_label)
-            return
-        logging.info(f"Updating UI with {len(home)} sections.")
+            return GLib.SOURCE_REMOVE  # Stop GLib from calling this again
+
         for section in home:
-            section_box = HomeRow(section)
-            home_box.append(section_box)
+            if section.title in row_cache:
+                # UPDATE EXISTING ROW: Only append items we haven't rendered yet
+                section_box, carousel, current_count = row_cache[section.title]
+                if len(section.contents) > current_count:
+                    new_items = section.contents[current_count:]
+                    for item in new_items:
+                        carousel.append(HomeItemCard(item))
+                    # Update cache with the new count
+                    row_cache[section.title] = (
+                        section_box,
+                        carousel,
+                        len(section.contents),
+                    )
+            else:
+                # CREATE NEW ROW
+                section_box, carousel = HomeRow(section)
+                home_box.append(section_box)
+                row_cache[section.title] = (
+                    section_box,
+                    carousel,
+                    len(section.contents),
+                )
 
         is_loading = False
+        return GLib.SOURCE_REMOVE  # Standard practice for idle_add callbacks
 
-    home_page_subject = BehaviorSubject[HomePageType]([])
+    # --- RX CALLBACKS (No lambdas) ---
+    def on_home_data_next(data_tuple: Tuple[HomePageType, bool]):
+        home_data, is_reset = data_tuple
+        # Pass arguments explicitly to avoid lambda wrapping
+        GLib.idle_add(update_ui, home_data, is_reset)
 
-    def on_home_data_next(data: HomePageType):
-        GLib.idle_add(update_ui, data)
+    def on_rx_error(e):
+        logging.error(f"Rx Error: {e}")
 
     home_page_subject.subscribe(
         on_next=on_home_data_next,
-        on_error=lambda e: print(f"Rx Error: {e}"),
+        on_error=on_rx_error,
     )
 
-    # --- 2. BACKGROUND FETCH LOGIC ---
-    def fetch_home_data(yt: ytmusicapi.YTMusic, limit: int):
+    # --- BACKGROUND FETCH LOGIC ---
+    def fetch_home_data(yt: ytmusicapi.YTMusic, limit: int, is_reset: bool):
         try:
-            # Network calls MUST be off the main GTK thread
             raw_home = yt.get_home(limit=limit)
             home_data = HomePageTypeAdapter.validate_python(raw_home)
-            # Emitting to the subject will trigger update_ui via GLib.idle_add
-            home_page_subject.on_next(home_data)
+            home_page_subject.on_next((home_data, is_reset))
         except Exception as e:
             logging.error(f"Failed to fetch home data: {e}")
-            nonlocal is_loading
-            is_loading = False
+            home_page_subject.on_next(([], is_reset))
+
+    def trigger_load_more(dummy_value=None):
+        nonlocal is_loading, current_limit
+        logging.info("Fetching more data...")
+        is_loading = True
+        current_limit += 5
+        threading.Thread(
+            target=fetch_home_data,
+            args=(current_yt_instance, current_limit, False),  # False = don't reset UI
+            daemon=True,
+        ).start()
+
+    def on_edge_reached(sw: Gtk.ScrolledWindow, pos: Gtk.PositionType):
+        if pos == Gtk.PositionType.BOTTOM:
+            scroll_subject.on_next(None)
+
+    scrolled.connect("edge-reached", on_edge_reached)
+
+    def check_scroll_valid(dummy_value) -> bool:
+        return not is_loading and current_yt_instance is not None
+
+    scroll_subject.pipe(ops.filter(check_scroll_valid)).subscribe(
+        on_next=trigger_load_more, on_error=on_rx_error
+    )
 
     def on_yt_changed(yt: Optional[ytmusicapi.YTMusic]):
         nonlocal current_yt_instance, is_loading, current_limit
         current_yt_instance = yt
-        # ALWAYS update GTK UI on the main thread to prevent crashes
-        # GLib.idle_add(update_ui, yt)
+
         if yt is None:
             logging.info("YT Music instance is None, showing error message.")
             return
+
         current_limit = 5
         is_loading = True
 
-        # raw_home = yt.get_home(limit=5)
-        # home_data = HomePage.validate_python(raw_home)
-        # home_page_subject.on_next(home_data)
+        # FIXED: Added the explicit `True` argument for `is_reset`
         threading.Thread(
-            target=fetch_home_data, args=(yt, current_limit), daemon=True
+            target=fetch_home_data, args=(yt, current_limit, True), daemon=True
         ).start()
 
-    yt_subject.subscribe(
-        on_next=on_yt_changed, on_error=lambda e: print(f"Rx Error: {e}")
-    )
+    yt_subject.subscribe(on_next=on_yt_changed, on_error=on_rx_error)
+
     return scrolled
