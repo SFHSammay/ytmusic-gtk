@@ -1,3 +1,4 @@
+from lib.MPRISController import MPRISController
 from typing import Optional
 import pathlib
 import logging
@@ -53,7 +54,7 @@ class PlayerState:
     )
 
 
-def PlayBar(state: PlayerState = PlayerState()) -> Gtk.ActionBar:
+def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
     """
     A GStreamer-powered play bar with reactive bindings to the PlayerState.
     """
@@ -71,11 +72,63 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.ActionBar:
     flags &= ~(1 << 0)
     player.set_property("flags", flags)
 
-    play_bar = Gtk.ActionBar()
-    play_bar.set_size_request(-1, 80)
+    mpris_controller = MPRISController(state)
+
+    # Rebuilding the PlayBar as a vertical Box to hold the progress bar on top
+    play_bar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+    play_bar.set_size_request(-1, 100)
+    # Adding background class so it visually looks like a cohesive action bar
+    play_bar.add_css_class("background")
+
+    # --- PROGRESS BAR SETUP (Top) ---
+    progress_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, 0.01)
+    progress_scale.set_draw_value(False)
+    progress_scale.set_hexpand(True)
+    # Make it flush against the top edge
+    progress_scale.set_margin_top(0)
+    progress_scale.set_margin_bottom(0)
+    # Add a bit of padding on the sides
+    progress_scale.set_margin_start(8)
+    progress_scale.set_margin_end(8)
+
+    is_updating_scale = False
+
+    def update_progress_ui(times: tuple[int, int]):
+        nonlocal is_updating_scale
+        current_ns, total_ns = times
+
+        is_updating_scale = True
+        if total_ns > 0:
+            progress_scale.set_range(0, total_ns / 1e9)
+        progress_scale.set_value(current_ns / 1e9)
+        is_updating_scale = False
+
+    combine_latest(state.current_time, state.total_time).subscribe(update_progress_ui)
+
+    def on_scale_changed(scale: Gtk.Scale) -> None:
+        if is_updating_scale:
+            return
+
+        val_seconds = scale.get_value()
+        new_pos_ns = int(val_seconds * 1e9)
+        player.seek_simple(
+            Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT, new_pos_ns
+        )
+        state.current_time.on_next(new_pos_ns)
+
+    progress_scale.connect("value-changed", on_scale_changed)
+    play_bar.append(progress_scale)
+
+    # --- ACTION AREA SETUP (Bottom) ---
+    # CenterBox replaces ActionBar's layout capabilities to hold Left/Center/Right controls
+    action_area = Gtk.CenterBox()
+    action_area.set_margin_start(8)
+    action_area.set_margin_end(8)
+    action_area.set_margin_bottom(8)
+    play_bar.append(action_area)
 
     # --- Helper to toggle GTK CSS classes reactively ---
-    def toggle_css(widget: Gtk.Widget, class_name: str, active: bool):
+    def toggle_css(widget: Gtk.Widget, class_name: str, active: bool) -> None:
         if active:
             widget.add_css_class(class_name)
         else:
@@ -83,12 +136,18 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.ActionBar:
 
     # --- Time Formatting Helper ---
     def format_time(ns: int) -> str:
-        if ns <= 0:
+        if ns == 0:
             return "0:00"
+        if ns < 0:
+            return "N/A"
         seconds = ns // 1_000_000_000
-        m = seconds // 60
-        s = seconds % 60
-        return f"{m}:{s:02d}"
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        if hours > 0:
+            return f"{hours}:{minutes:02d}:{secs:02d}"
+        else:
+            return f"{minutes}:{secs:02d}"
 
     def on_audio_file_changed(file_path: Optional[pathlib.Path]):
         if file_path:
@@ -129,7 +188,7 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.ActionBar:
         raise RuntimeError("GStreamer bus initialization failed")
     bus.add_signal_watch()
 
-    def on_bus_message(bus, message):
+    def on_bus_message(bus: Gst.Bus, message: Gst.Message):
         if message.type == Gst.MessageType.EOS:
             # Stop playing, reset time to 0, and rewind GStreamer
             state.playing.on_next(False)
@@ -190,7 +249,9 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.ActionBar:
     controls_box.append(play_pause_btn)
     controls_box.append(next_btn)
     controls_box.append(time_label)
-    play_bar.pack_start(controls_box)
+
+    # Pack into our new CenterBox
+    action_area.set_start_widget(controls_box)
 
     # ----------------------------------------------------
     # 2. SONG INFO & ACTIONS (Center)
@@ -235,7 +296,9 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.ActionBar:
     center_box.append(album_art)
     center_box.append(text_vbox)
     center_box.append(actions_box)
-    play_bar.set_center_widget(center_box)
+
+    # Pack into our new CenterBox
+    action_area.set_center_widget(center_box)
 
     # -> Reactive Bindings: Song Info & Actions
     # album_art may be an icon name (string) or a URL to fetch; handle both.
@@ -291,7 +354,9 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.ActionBar:
     right_box.append(repeat_btn)
     right_box.append(shuffle_btn)
     right_box.append(expand_btn)
-    play_bar.pack_end(right_box)
+
+    # Pack into our new CenterBox
+    action_area.set_end_widget(right_box)
 
     # -> Reactive Bindings: System Controls
     state.repeat_on.subscribe(
