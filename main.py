@@ -1,3 +1,5 @@
+import logging
+from pathlib import Path
 from lib.ui.explore import ExplorePage
 from lib.ui.play_bar import PlayBar, PlayerState
 import ytmusicapi
@@ -72,7 +74,7 @@ class YTMusicWindow(Adw.ApplicationWindow):
             HomePage(yt_subject, self.player_state), "home", "Home", "go-home-symbolic"
         )
         self.stack.add_titled_with_icon(
-            ExplorePage(yt_subject), "explore", "Explore", "location-symbolic"
+            ExplorePage(yt_subject), "explore", "Explore", "compass2-symbolic"
         )
 
         # append playbar with the shared state instance
@@ -114,7 +116,31 @@ class YTMusicWindow(Adw.ApplicationWindow):
 class YTMusicApp(Adw.Application):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        # Add startup connection
+        self.connect("startup", self.on_startup)
         self.connect("activate", self.on_activate)
+
+    def on_startup(self, app):
+        # Grab the default display and icon theme
+        display = Gdk.Display.get_default()
+        if not display:
+            logging.warning("Could not get default display for icon theming.")
+            return
+        icon_theme = Gtk.IconTheme.get_for_display(display)
+
+        # Build the absolute path to your icons directory
+        # Assuming this script is at the root of your project
+        # base_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = Path(__file__).parent.resolve()  # Adjust as needed
+        icons_path = str(base_dir / "assets" / "icons")
+
+        logging.info(f"Looking for icons in: {icons_path}")
+        if not os.path.exists(icons_path):
+            logging.warning(f"Icons path does not exist: {icons_path}")
+
+        # Tell GTK to look in this folder for icon names
+        icon_theme.add_search_path(icons_path)
+        logging.info(f"Added custom icon path: {icons_path}")
 
     def on_activate(self, app):
         self.yt_subject = BehaviorSubject[ytmusicapi.YTMusic | None](None)

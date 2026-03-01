@@ -140,6 +140,11 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
         else:
             widget.remove_css_class(class_name)
 
+    def toggle_icon(
+        widget: Gtk.Button, active: bool, on_icon: str, off_icon: str
+    ) -> None:
+        widget.set_icon_name(on_icon if active else off_icon)
+
     # --- Time Formatting Helper ---
     def format_time(ns: int) -> str:
         if ns == 0:
@@ -302,10 +307,23 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
     actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
     actions_box.set_valign(Gtk.Align.CENTER)
 
-    dislike_btn = Gtk.Button(icon_name="face-sad-symbolic")
+    dislike_btn = Gtk.Button(icon_name="thumbs-down-outline-symbolic")
     dislike_btn.add_css_class("flat")
-    like_btn = Gtk.Button(icon_name="face-smile-symbolic")
+    # Update the icon to a filled version when active 'thumbs-down-symbolic'
+    state.is_disliked.subscribe(
+        lambda val: toggle_icon(
+            dislike_btn, val, "thumbs-down-symbolic", "thumbs-down-outline-symbolic"
+        )
+    )
+    like_btn = Gtk.Button(icon_name="thumbs-up-outline-symbolic")
     like_btn.add_css_class("flat")
+    # Update the icon to a filled version when active 'thumbs-up-symbolic'
+    state.is_liked.subscribe(
+        lambda val: toggle_icon(
+            like_btn, val, "thumbs-up-symbolic", "thumbs-up-outline-symbolic"
+        )
+    )
+
     more_btn = Gtk.Button(icon_name="view-more-symbolic")
     more_btn.add_css_class("flat")
 
@@ -346,14 +364,9 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
             " • ".join(filter(None, info))  # Join non-empty parts with bullets
         )
     )
-
-    # Toggle highlight on Like/Dislike (Using Adwaita's 'suggested-action' and 'error' classes)
-    state.is_liked.subscribe(lambda val: toggle_css(like_btn, "suggested-action", val))
     like_btn.connect(
         "clicked", lambda _: state.is_liked.on_next(not state.is_liked.value)
     )
-
-    state.is_disliked.subscribe(lambda val: toggle_css(dislike_btn, "error", val))
     dislike_btn.connect(
         "clicked", lambda _: state.is_disliked.on_next(not state.is_disliked.value)
     )
