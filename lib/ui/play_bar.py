@@ -124,6 +124,7 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.ActionBar:
     center_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
     center_box.set_valign(Gtk.Align.CENTER)
 
+    # album art display widget. we keep Gtk.Image for easy icon handling
     album_art = Gtk.Image()
     album_art.set_pixel_size(48)
 
@@ -163,7 +164,18 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.ActionBar:
     play_bar.set_center_widget(center_box)
 
     # -> Reactive Bindings: Song Info & Actions
-    state.album_art.subscribe(lambda icon: album_art.set_from_icon_name(icon))
+    # album_art may be an icon name (string) or a URL to fetch; handle both.
+    def _on_album_art_change(value):
+        if not value:
+            return
+        if isinstance(value, str) and value.startswith("http"):
+            from utils import load_image_async
+
+            load_image_async(album_art, value)
+        else:
+            album_art.set_from_icon_name(value)
+
+    state.album_art.subscribe(_on_album_art_change)
 
     # Safely escape text before applying markup
     state.title.subscribe(

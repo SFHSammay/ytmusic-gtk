@@ -45,7 +45,10 @@ HomePageTypeAdapter = TypeAdapter(List[HomeSectionData])
 HomePageType = List[HomeSectionData]
 
 
-def HomeItemCard(item: HomeItemData) -> Gtk.Box:
+from lib.ui.play_bar import PlayerState
+
+
+def HomeItemCard(item: HomeItemData, player_state: PlayerState) -> Gtk.Box:
     card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
     card.set_size_request(160, -1)
     card.set_halign(Gtk.Align.START)
@@ -96,6 +99,24 @@ def HomeItemCard(item: HomeItemData) -> Gtk.Box:
 
     def on_card_click(gesture, n_press, x, y):
         logging.info(f"Clicked on card: {item}")
+        # update the playbar state with this item's info
+        player_state.title.on_next(item.title)
+        # subtitle uses artists/author if available
+        creator = item.artists[0].name if item.artists else (
+            item.author[0].name if item.author else "Unknown"
+        )
+        player_state.subtitle.on_next(creator)
+        # album art should use the thumbnail url if present
+        if item.thumbnails:
+            thumb_url = (
+                item.thumbnails[-1].url
+                if isinstance(item.thumbnails, list)
+                else item.thumbnails
+            )
+            player_state.album_art.on_next(thumb_url)
+        else:
+            # fallback to generic icon
+            player_state.album_art.on_next("audio-x-generic-symbolic")
 
     click.connect("pressed", on_card_click)
     card.add_controller(click)
@@ -106,7 +127,7 @@ def HomeItemCard(item: HomeItemData) -> Gtk.Box:
 # Leave HomeItemCard exactly as you have it!
 
 
-def HomeRow(section: HomeSectionData) -> tuple[Gtk.Box, Adw.Carousel]:
+def HomeRow(section: HomeSectionData, player_state: PlayerState) -> tuple[Gtk.Box, Adw.Carousel]:
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
     header = Gtk.Label(label=section.title)
     header.set_halign(Gtk.Align.START)
@@ -120,7 +141,7 @@ def HomeRow(section: HomeSectionData) -> tuple[Gtk.Box, Adw.Carousel]:
     carousel.set_allow_scroll_wheel(False)
 
     for item in section.contents:
-        carousel.append(HomeItemCard(item))
+        carousel.append(HomeItemCard(item, player_state))
 
     dots = Adw.CarouselIndicatorDots()
     dots.set_carousel(carousel)
@@ -134,6 +155,7 @@ def HomeRow(section: HomeSectionData) -> tuple[Gtk.Box, Adw.Carousel]:
 
 def HomePage(
     yt_subject: YTMusicSubject,
+    player_state: PlayerState,
 ) -> Gtk.ScrolledWindow:
     scrolled = Gtk.ScrolledWindow()
     scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -180,7 +202,7 @@ def HomePage(
                 if len(section.contents) > current_count:
                     new_items = section.contents[current_count:]
                     for item in new_items:
-                        carousel.append(HomeItemCard(item))
+                        carousel.append(HomeItemCard(item, player_state))
                     # Update cache with the new count
                     row_cache[section.title] = (
                         section_box,
@@ -189,7 +211,7 @@ def HomePage(
                     )
             else:
                 # CREATE NEW ROW
-                section_box, carousel = HomeRow(section)
+                section_box, carousel = HomeRow(section, player_state)
                 home_box.append(section_box)
                 row_cache[section.title] = (
                     section_box,

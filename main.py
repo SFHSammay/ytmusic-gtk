@@ -1,5 +1,5 @@
 from lib.ui.explore import ExplorePage
-from lib.ui.play_bar import PlayBar
+from lib.ui.play_bar import PlayBar, PlayerState
 import ytmusicapi
 from reactivex.subject import BehaviorSubject
 from lib.types import YTMusicSubject
@@ -64,16 +64,19 @@ class YTMusicWindow(Adw.ApplicationWindow):
         main_box.append(self.stack)
         self.stack.set_vexpand(True)
 
+        # create a single shared state model for the player
+        self.player_state = PlayerState()
+
         # Build specific UI containers
-        # self.home_box = self.create_home_page()
         self.stack.add_titled_with_icon(
-            HomePage(yt_subject), "home", "Home", "go-home-symbolic"
+            HomePage(yt_subject, self.player_state), "home", "Home", "go-home-symbolic"
         )
         self.stack.add_titled_with_icon(
             ExplorePage(yt_subject), "explore", "Explore", "location-symbolic"
         )
 
-        main_box.append(PlayBar())
+        # append playbar with the shared state instance
+        main_box.append(PlayBar(self.player_state))
 
         self.fetch_data_async(yt_subject)
 
