@@ -16,15 +16,24 @@ from reactivex.subject import BehaviorSubject
 def home_item_card(item: HomeItem) -> Gtk.Box:
     card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
     card.set_size_request(160, -1)
-    # THE FIX: Stop the card from expanding to fill the Carousel horizontally
     card.set_halign(Gtk.Align.START)
+    card.set_valign(Gtk.Align.START)
     card.add_css_class("card")
 
-    # Now that the card is rigidly 160px wide, setting the image to 160x160 works perfectly
+    # --- THE TRUE CAGE: Gtk.Fixed ---
+    # This container strictly reports 160x160 to the UI and silences the image
+    image_cage = Gtk.Fixed()
+    image_cage.set_size_request(160, 160)
+
     img = Gtk.Picture()
+    # Force the picture itself to draw at exactly 160x160
     img.set_size_request(160, 160)
     img.set_can_shrink(True)
+    # COVER forces the image to perfectly fill our 160x160 square by cropping it
     img.set_content_fit(Gtk.ContentFit.COVER)
+
+    # Place the image exactly at the top-left (0, 0) of our rigid Fixed container
+    image_cage.put(img, 0, 0)
 
     if hasattr(item, "thumbnails") and item.thumbnails:
         thumb_url = (
@@ -37,16 +46,24 @@ def home_item_card(item: HomeItem) -> Gtk.Box:
     title_lbl = Gtk.Label(label=item.title)
     title_lbl.set_halign(Gtk.Align.START)
     title_lbl.set_wrap(True)
+    title_lbl.set_wrap_mode(
+        Pango.WrapMode.WORD_CHAR
+    )  # Safely wrap long words without stretching
     title_lbl.set_lines(2)
     title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+    title_lbl.set_size_request(
+        160, -1
+    )  # Lock the text width so it can't stretch the card
 
     creator = item.artists[0].name if getattr(item, "artists", None) else "Unknown"
     subtitle_lbl = Gtk.Label(label=creator)
     subtitle_lbl.set_halign(Gtk.Align.START)
     subtitle_lbl.add_css_class("dim-label")
     subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+    subtitle_lbl.set_size_request(160, -1)
 
-    card.append(img)
+    # Append the image_cage instead of the aspect frame
+    card.append(image_cage)
     card.append(title_lbl)
     card.append(subtitle_lbl)
 
