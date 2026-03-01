@@ -1,3 +1,4 @@
+import logging
 from utils import load_image_async
 from typing import Optional
 from data import HomePageType
@@ -127,7 +128,7 @@ class YTMusicWindow(Adw.ApplicationWindow):
 
                 GLib.idle_add(self.populate_ui, home_data, explore_data)
             except Exception as e:
-                print(f"Error fetching data: {e}")
+                logging.error(f"Error fetching data: {e}")
                 GLib.idle_add(self.now_playing_title.set_label, "Error loading data")
 
         thread = threading.Thread(target=task, daemon=True)
