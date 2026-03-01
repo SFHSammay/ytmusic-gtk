@@ -41,6 +41,7 @@ class PlayerState:
     total_time: BehaviorSubject[int] = field(default_factory=lambda: BehaviorSubject(0))
 
     # Actions & System
+    volume: BehaviorSubject[float] = field(default_factory=lambda: BehaviorSubject(1.0))
     is_liked: BehaviorSubject[bool] = field(
         default_factory=lambda: BehaviorSubject(False)
     )
@@ -349,9 +350,29 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
     right_box.set_valign(Gtk.Align.CENTER)
     right_box.set_margin_end(16)
 
-    vol_btn = Gtk.Button(icon_name="audio-volume-high-symbolic")
+    # Change to a MenuButton so it can natively handle a popover
+    vol_btn = Gtk.MenuButton(icon_name="audio-volume-high-symbolic")
     vol_btn.add_css_class("flat")
 
+    # Create the Popover and the Slider (Scale)
+    vol_popover = Gtk.Popover()
+    vol_scale = Gtk.Scale.new_with_range(Gtk.Orientation.VERTICAL, 0.0, 1.0, 0.01)
+    vol_scale.set_inverted(True)  # Puts highest volume at the top of the slider
+    vol_scale.set_size_request(-1, 150)
+    vol_scale.set_draw_value(False)
+
+    # Wrap the slider in a Box to give it nice padding inside the popover
+    vol_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+    vol_box.set_margin_top(4)
+    vol_box.set_margin_bottom(4)
+    vol_box.set_margin_start(0)
+    vol_box.set_margin_end(0)
+    vol_box.append(vol_scale)
+
+    vol_popover.set_child(vol_box)
+    vol_btn.set_popover(vol_popover)
+
+    # Existing buttons
     repeat_btn = Gtk.Button(icon_name="media-playlist-repeat-symbolic")
     repeat_btn.add_css_class("flat")
 
@@ -369,7 +390,36 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
     # Pack into our new CenterBox
     action_area.set_end_widget(right_box)
 
-    # -> Reactive Bindings: System Controls
+    # -> Reactive Bindings: Volume Control
+    def on_vol_state_changed(vol: float):
+        # 1. Update the GStreamer player
+        player.set_property("volume", vol)
+
+        # 2. Update the UI slider (guard against infinite feedback loops)
+        if abs(vol_scale.get_value() - vol) > 0.001:
+            vol_scale.set_value(vol)
+
+        # 3. Dynamically update the speaker icon based on volume level
+        if vol == 0:
+            vol_btn.set_icon_name("audio-volume-muted-symbolic")
+        elif vol < 0.33:
+            vol_btn.set_icon_name("audio-volume-low-symbolic")
+        elif vol < 0.66:
+            vol_btn.set_icon_name("audio-volume-medium-symbolic")
+        else:
+            vol_btn.set_icon_name("audio-volume-high-symbolic")
+
+    state.volume.subscribe(on_vol_state_changed)
+
+    def on_vol_scale_changed(scale: Gtk.Scale):
+        val = scale.get_value()
+        # Push to state (guard against infinite feedback loops)
+        if abs(state.volume.value - val) > 0.001:
+            state.volume.on_next(val)
+
+    vol_scale.connect("value-changed", on_vol_scale_changed)
+
+    # -> Reactive Bindings: System Controls (Existing)
     state.repeat_on.subscribe(
         lambda val: toggle_css(repeat_btn, "suggested-action", val)
     )
