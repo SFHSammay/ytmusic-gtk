@@ -4,9 +4,6 @@ import ytmusicapi
 from reactivex.subject import BehaviorSubject
 from lib.types import YTMusicSubject
 from lib.ui.home import HomePage
-from lib.player import player
-import logging
-from typing import Optional
 import logging
 import os
 import sys

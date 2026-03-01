@@ -1,58 +1,121 @@
 import logging
+from dataclasses import dataclass, field
 from gi.repository import Gtk, GLib, Adw, Pango
 from reactivex.subject import BehaviorSubject
+from reactivex import combine_latest
 
 
-def PlayBar(playing: BehaviorSubject[bool] = BehaviorSubject(False)) -> Gtk.ActionBar:
+# ----------------------------------------------------
+# STATE MODEL
+# ----------------------------------------------------
+@dataclass
+class PlayerState:
+    """Holds all reactive state for the PlayBar."""
+
+    playing: BehaviorSubject[bool] = field(
+        default_factory=lambda: BehaviorSubject(False)
+    )
+
+    # Track Info
+    title: BehaviorSubject[str] = field(
+        default_factory=lambda: BehaviorSubject(
+            "サイエンス - Science (feat. KASANE TETO)"
+        )
+    )
+    subtitle: BehaviorSubject[str] = field(
+        default_factory=lambda: BehaviorSubject("MIMI • Science • 2024")
+    )
+    album_art: BehaviorSubject[str] = field(
+        default_factory=lambda: BehaviorSubject("audio-x-generic-symbolic")
+    )
+
+    # Timing
+    current_time: BehaviorSubject[str] = field(
+        default_factory=lambda: BehaviorSubject("0:04")
+    )
+    total_time: BehaviorSubject[str] = field(
+        default_factory=lambda: BehaviorSubject("3:09")
+    )
+
+    # Actions & System
+    is_liked: BehaviorSubject[bool] = field(
+        default_factory=lambda: BehaviorSubject(False)
+    )
+    is_disliked: BehaviorSubject[bool] = field(
+        default_factory=lambda: BehaviorSubject(False)
+    )
+    shuffle_on: BehaviorSubject[bool] = field(
+        default_factory=lambda: BehaviorSubject(False)
+    )
+    repeat_on: BehaviorSubject[bool] = field(
+        default_factory=lambda: BehaviorSubject(False)
+    )
+
+
+# ----------------------------------------------------
+# UI COMPONENT
+# ----------------------------------------------------
+def PlayBar(state: PlayerState = PlayerState()) -> Gtk.ActionBar:
+    if state is None:
+        state = PlayerState()
+
     play_bar = Gtk.ActionBar()
-
-    # Increase the overall height of the Action Bar
     play_bar.set_size_request(-1, 80)
+
+    # --- Helper to toggle GTK CSS classes reactively ---
+    def toggle_css(widget: Gtk.Widget, class_name: str, active: bool):
+        if active:
+            widget.add_css_class(class_name)
+        else:
+            widget.remove_css_class(class_name)
 
     # ----------------------------------------------------
     # 1. PLAY CONTROLS (Left)
     # ----------------------------------------------------
     controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
     controls_box.set_valign(Gtk.Align.CENTER)
-    controls_box.set_margin_start(16)  # Padding from the left edge
+    controls_box.set_margin_start(16)
 
     prev_btn = Gtk.Button(icon_name="media-skip-backward-symbolic")
     prev_btn.add_css_class("flat")
 
-    play_icon = Gtk.Image.new_from_icon_name("media-playback-start-symbolic")
+    play_icon = Gtk.Image()
     play_icon.set_pixel_size(32)
 
     play_pause_btn = Gtk.Button()
     play_pause_btn.set_child(play_icon)
     play_pause_btn.add_css_class("flat")
     play_pause_btn.add_css_class("suggested-action")
-
-    def on_play_pause_toggled(button: Gtk.Button):
-        logging.debug("Play/Pause button clicked")
-        playing.on_next(not playing.value)
-
-        play_icon.set_from_icon_name(
-            "media-playback-pause-symbolic"
-            if playing.value
-            else "media-playback-start-symbolic"
-        )
-
-    play_pause_btn.connect("clicked", on_play_pause_toggled)
-    # make the button larger without increasing the icon size:
     play_pause_btn.set_size_request(48, 48)
 
     next_btn = Gtk.Button(icon_name="media-skip-forward-symbolic")
     next_btn.add_css_class("flat")
 
-    time_label = Gtk.Label(label="0:04 / 3:09")
+    time_label = Gtk.Label()
     time_label.add_css_class("dim-label")
     time_label.set_margin_start(8)
+
+    # -> Reactive Bindings: Play Controls
+    state.playing.subscribe(
+        lambda is_playing: play_icon.set_from_icon_name(
+            "media-playback-pause-symbolic"
+            if is_playing
+            else "media-playback-start-symbolic"
+        )
+    )
+    play_pause_btn.connect(
+        "clicked", lambda _: state.playing.on_next(not state.playing.value)
+    )
+
+    # Combine current and total time streams to update the label
+    combine_latest(state.current_time, state.total_time).subscribe(
+        lambda times: time_label.set_text(f"{times[0]} / {times[1]}")
+    )
 
     controls_box.append(prev_btn)
     controls_box.append(play_pause_btn)
     controls_box.append(next_btn)
     controls_box.append(time_label)
-
     play_bar.pack_start(controls_box)
 
     # ----------------------------------------------------
@@ -61,18 +124,17 @@ def PlayBar(playing: BehaviorSubject[bool] = BehaviorSubject(False)) -> Gtk.Acti
     center_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
     center_box.set_valign(Gtk.Align.CENTER)
 
-    album_art = Gtk.Image.new_from_icon_name("audio-x-generic-symbolic")
-    album_art.set_pixel_size(48)  # Made slightly larger for the taller bar
+    album_art = Gtk.Image()
+    album_art.set_pixel_size(48)
 
     text_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
     text_vbox.set_valign(Gtk.Align.CENTER)
 
-    title_label = Gtk.Label(label="サイエンス - Science (feat. KASANE TETO)")
+    title_label = Gtk.Label()
     title_label.set_halign(Gtk.Align.START)
     title_label.set_ellipsize(Pango.EllipsizeMode.END)
-    title_label.set_markup("<b>サイエンス - Science (feat. KASANE TETO)</b>")
 
-    subtitle_label = Gtk.Label(label="MIMI • Science • 2024")
+    subtitle_label = Gtk.Label()
     subtitle_label.set_halign(Gtk.Align.START)
     subtitle_label.set_ellipsize(Pango.EllipsizeMode.END)
     subtitle_label.add_css_class("dim-label")
@@ -98,16 +160,34 @@ def PlayBar(playing: BehaviorSubject[bool] = BehaviorSubject(False)) -> Gtk.Acti
     center_box.append(album_art)
     center_box.append(text_vbox)
     center_box.append(actions_box)
-
-    # Set as the center widget
     play_bar.set_center_widget(center_box)
+
+    # -> Reactive Bindings: Song Info & Actions
+    state.album_art.subscribe(lambda icon: album_art.set_from_icon_name(icon))
+
+    # Safely escape text before applying markup
+    state.title.subscribe(
+        lambda t: title_label.set_markup(f"<b>{GLib.markup_escape_text(t)}</b>")
+    )
+    state.subtitle.subscribe(lambda st: subtitle_label.set_text(st))
+
+    # Toggle highlight on Like/Dislike (Using Adwaita's 'suggested-action' and 'error' classes)
+    state.is_liked.subscribe(lambda val: toggle_css(like_btn, "suggested-action", val))
+    like_btn.connect(
+        "clicked", lambda _: state.is_liked.on_next(not state.is_liked.value)
+    )
+
+    state.is_disliked.subscribe(lambda val: toggle_css(dislike_btn, "error", val))
+    dislike_btn.connect(
+        "clicked", lambda _: state.is_disliked.on_next(not state.is_disliked.value)
+    )
 
     # ----------------------------------------------------
     # 3. SYSTEM CONTROLS (Right)
     # ----------------------------------------------------
     right_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
     right_box.set_valign(Gtk.Align.CENTER)
-    right_box.set_margin_end(16)  # Padding from the right edge
+    right_box.set_margin_end(16)
 
     vol_btn = Gtk.Button(icon_name="audio-volume-high-symbolic")
     vol_btn.add_css_class("flat")
@@ -125,7 +205,21 @@ def PlayBar(playing: BehaviorSubject[bool] = BehaviorSubject(False)) -> Gtk.Acti
     right_box.append(repeat_btn)
     right_box.append(shuffle_btn)
     right_box.append(expand_btn)
-
     play_bar.pack_end(right_box)
+
+    # -> Reactive Bindings: System Controls
+    state.repeat_on.subscribe(
+        lambda val: toggle_css(repeat_btn, "suggested-action", val)
+    )
+    repeat_btn.connect(
+        "clicked", lambda _: state.repeat_on.on_next(not state.repeat_on.value)
+    )
+
+    state.shuffle_on.subscribe(
+        lambda val: toggle_css(shuffle_btn, "suggested-action", val)
+    )
+    shuffle_btn.connect(
+        "clicked", lambda _: state.shuffle_on.on_next(not state.shuffle_on.value)
+    )
 
     return play_bar
