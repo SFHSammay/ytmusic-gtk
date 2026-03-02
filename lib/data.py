@@ -60,7 +60,7 @@ class History(BaseModel):
     songs: list[Song]
 
 
-class Playlist(BaseModel):
+class WatchPlaylist(BaseModel):
     tracks: list[Track]
     lyrics: Optional[str] = None
     playlist_id: Optional[str] = Field(None, alias="playlistId")

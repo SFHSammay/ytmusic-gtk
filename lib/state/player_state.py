@@ -3,7 +3,7 @@ from typing import cast
 from lib.sys.env import CACHE_DIR
 from typing import Literal
 from lib.data import SongDetail
-from lib.data import Playlist
+from lib.data import WatchPlaylist
 from reactivex import combine_latest
 import pathlib
 import enum
@@ -64,6 +64,9 @@ class StreamStatus:
 class CurrentPlaylist:
     media: BehaviorSubject[list[MediaStatus]] = field(
         default_factory=lambda: BehaviorSubject([])
+    )
+    playlist_id: BehaviorSubject[Optional[str]] = field(
+        default_factory=lambda: BehaviorSubject[Optional[str]](None)
     )
     index: BehaviorSubject[int] = field(default_factory=lambda: BehaviorSubject(0))
     name: BehaviorSubject[Optional[str]] = field(
@@ -166,7 +169,7 @@ def get_audio_file(yt: "ytmusicapi.YTMusic", video_id: str) -> pathlib.Path:
     return audio_files[0]
 
 
-def play_audio(
+def start_play(
     state: PlayerState,
     yt: "ytmusicapi.YTMusic",
     video_id: Optional[str] = None,
@@ -175,10 +178,17 @@ def play_audio(
 ) -> None:
     import threading
 
+    # If there is no video_id nor playlist_id, we can't play anything
+    if not video_id and not playlist_id and not initial_temp_music:
+        logging.warning("No video_id, playlist_id, nor initial_temp_music provided.")
+        return
+
     state.state.on_next(PlayState.LOADING)
     if initial_temp_music:
         state.playlist.media.on_next([initial_temp_music])
         state.playlist.index.on_next(0)
+        state.playlist.playlist_id.on_next(None)
+        state.playlist.name.on_next(None)
 
     def fetch_details() -> None:
         try:
@@ -186,15 +196,15 @@ def play_audio(
 
             if playlist_id and not playlist_id.startswith("RD"):
                 logging.info(f"Fetching playlist details for {playlist_id}")
-                raw_playlist = yt.get_playlist(playlist_id)
+                raw_playlist = yt.get_watch_playlist(playlistId=playlist_id)
             elif video_id:
                 logging.info(f"Fetching song details for {video_id}")
-                raw_playlist = yt.get_watch_playlist(video_id)
+                raw_playlist = yt.get_watch_playlist(videoId=video_id)
             if not raw_playlist:
                 logging.warning("No additional details found for this item.")
                 return
 
-            playlist = Playlist.model_validate(raw_playlist)
+            playlist = WatchPlaylist.model_validate(raw_playlist)
 
             media_list = []
             # Try to fetch song details in a playlist
@@ -228,6 +238,7 @@ def play_audio(
             # Update media list
             state.playlist.media.on_next(media_list)
             state.playlist.index.on_next(0)
+            state.playlist.playlist_id.on_next(playlist.playlist_id)
 
             state.state.on_next(PlayState.PLAYING)
 

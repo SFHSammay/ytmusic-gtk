@@ -191,12 +191,20 @@ def HomeItemCard(
     def on_card_click(gesture: Gtk.GestureClick, n_press: int, x: float, y: float):
         logging.info(f"Clicked on card: {item}")
 
-        if (
-            player_state.current_item
-            and item.video_id
-            and player_state.current_item.id == item.video_id
-        ):
-            # current_state = player_state.state.value
+        from lib.state.player_state import start_play
+
+        def is_current_playing():
+            return (
+                player_state.current_item
+                and item.video_id
+                and player_state.current_item.id == item.video_id
+            ) or (
+                player_state.playlist.playlist_id.value
+                and item.playlist_id
+                and player_state.playlist.playlist_id.value == item.playlist_id
+            )
+
+        if is_current_playing():
             if player_state.state.value == PlayState.PLAYING:
                 player_state.state.on_next(PlayState.PAUSED)
                 return
@@ -205,6 +213,16 @@ def HomeItemCard(
                 return
             elif player_state.state.value == PlayState.LOADING:
                 return
+
+        if item.playlist_id:
+            video_id = item.video_id
+            start_play(
+                state=player_state,
+                yt=yt,
+                playlist_id=item.playlist_id,
+                video_id=video_id,
+            )
+            return
 
         if not item.video_id:
             logging.warning("Item has no video ID, cannot play.")
@@ -238,9 +256,7 @@ def HomeItemCard(
             like_status=BehaviorSubject("INDIFFERENT"),
         )
 
-        from lib.state.player_state import play_audio
-
-        play_audio(
+        start_play(
             state=player_state,
             video_id=item.video_id,
             yt=yt,
