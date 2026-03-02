@@ -1,3 +1,5 @@
+from typing import Optional
+from lib.state.player_state import CurrentMusic
 from reactivex.subject import BehaviorSubject
 from lib.ui.play_bar import PlayerState
 from gi.repository import Gtk, Adw, GLib, GObject
@@ -51,14 +53,23 @@ def create_now_playing_view(
     view.set_content(content)
 
     # --- Reactive Bindings ---
-    def update_title(title: str):
-        markup = f"<span size='x-large' weight='bold'>{GLib.markup_escape_text(title)}</span>"
+    def update_title(title: Optional[str]):
+        markup = f"<span size='x-large' weight='bold'>{GLib.markup_escape_text(title or "")}</span>"
         GLib.idle_add(title_label.set_markup, markup)
 
-    def update_artist(artist: str):
-        GLib.idle_add(artist_label.set_text, artist)
+    def update_artist(artist: Optional[str]):
+        GLib.idle_add(artist_label.set_text, artist or "")
 
-    state.current_song.title.subscribe(update_title)
-    state.current_song.artist.subscribe(update_artist)
+    # state.current_song.title.subscribe(update_title)
+    # state.current_song.artist.subscribe(update_artist)
+    def on_current(current: Optional[CurrentMusic]) -> None:
+        if not current:
+            return
+        # update_title(current.title)
+        # update_artist(current.artist)
+        current.title.subscribe(update_title)
+        current.artist.subscribe(update_artist)
+
+    state.current.subscribe(on_current)
 
     return view

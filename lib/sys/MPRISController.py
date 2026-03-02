@@ -7,7 +7,7 @@ from reactivex import combine_latest
 
 if typing.TYPE_CHECKING:
     from lib.ui.play_bar import PlayerState
-    from lib.state.player_state import PlayState
+    from lib.state.player_state import PlayState, CurrentMusic
 
 
 # This XML defines the D-Bus API contract GNOME expects from your player
@@ -38,48 +38,50 @@ MPRIS_XML: str = """
 """
 
 
-class MPRISController:
-    # Explicit class variable typing
-    state: "PlayerState"
-    node_info: Gio.DBusNodeInfo
-    con: Gio.DBusConnection
+def setup_mpris_controller(state: "PlayerState") -> None:
+    """Sets up the MPRIS D-Bus interface using a functional, closure-based approach."""
 
-    def __init__(self, state: "PlayerState") -> None:
-        if sys.platform != "linux":
-            logging.info("Platform is not Linux. MPRIS controller disabled.")
-            return
-        self.state = state
-        self.node_info = Gio.DBusNodeInfo.new_for_xml(MPRIS_XML)
-        self.con = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    if not sys.platform.startswith("linux"):
+        logging.info("Platform is not Linux. MPRIS controller disabled.")
+        return
 
-        # Register the interfaces on D-Bus
-        if self.node_info.interfaces:
-            for interface in self.node_info.interfaces:
-                self.con.register_object(
-                    "/org/mpris/MediaPlayer2",
-                    interface,
-                    self.handle_method_call,
-                    self.handle_get_property,
-                    self.handle_set_property,
-                )
+    node_info = Gio.DBusNodeInfo.new_for_xml(MPRIS_XML)
+    if not node_info.interfaces:
+        logging.error("Failed to parse MPRIS XML interfaces.")
+        return
 
-        # Claim the bus name so GNOME knows we exist
-        Gio.bus_own_name_on_connection(
-            self.con,
-            "org.mpris.MediaPlayer2.MyApp",
-            Gio.BusNameOwnerFlags.NONE,
+    con = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+
+    # --- Helper Functions (Closures over `state` and `con`) ---
+
+    def get_metadata() -> Dict[str, GLib.Variant]:
+        if not state.current.value:
+            return {}
+        current = state.current.value
+        # MPRIS length expects microseconds. GStreamer yields nanoseconds.
+        length_us: int = current.total_time.value // 1000
+
+        return {
+            "mpris:trackid": GLib.Variant("s", "/org/mpris/MediaPlayer2/Track/Current"),
+            "xesam:title": GLib.Variant("s", current.title.value),
+            "xesam:artist": GLib.Variant("as", [current.artist.value]),
+            "mpris:length": GLib.Variant("x", length_us),
+        }
+
+    def emit_properties_changed(
+        interface_name: str, changed_props: Dict[str, GLib.Variant]
+    ) -> None:
+        con.emit_signal(
             None,
-            None,
+            "/org/mpris/MediaPlayer2",
+            "org.freedesktop.DBus.Properties",
+            "PropertiesChanged",
+            GLib.Variant("(sa{sv}as)", (interface_name, changed_props, [])),
         )
 
-        # Reactive Bindings: Update GNOME when internal state changes
-        self.state.state.subscribe(self.on_playback_status_changed)
-        combine_latest(
-            self.state.title, self.state.artist, self.state.total_time
-        ).subscribe(self.on_metadata_changed)
+    # --- D-Bus Event Handlers ---
 
     def handle_method_call(
-        self,
         connection: Gio.DBusConnection,
         sender: str,
         object_path: str,
@@ -88,36 +90,32 @@ class MPRISController:
         parameters: GLib.Variant,
         invocation: Gio.DBusMethodInvocation,
     ) -> None:
-        """Handles incoming commands from GNOME (e.g. Media Keys)."""
         from lib.state.player_state import PlayState
 
         if interface_name == "org.mpris.MediaPlayer2.Player":
             if method_name == "PlayPause":
-                current = self.state.state.value
+                current = state.state.value
                 if current == PlayState.PLAYING:
-                    self.state.state.on_next(PlayState.PAUSED)
+                    state.state.on_next(PlayState.PAUSED)
                 elif current == PlayState.PAUSED:
-                    self.state.state.on_next(PlayState.PLAYING)
+                    state.state.on_next(PlayState.PLAYING)
             elif method_name == "Play":
-                self.state.state.on_next(PlayState.PLAYING)
+                state.state.on_next(PlayState.PLAYING)
             elif method_name == "Pause":
-                self.state.state.on_next(PlayState.PAUSED)
+                state.state.on_next(PlayState.PAUSED)
             elif method_name in ("Next", "Previous"):
                 # Add logic to skip tracks if you implement a queue in PlayerState
                 pass
 
-        # We must return something to the invocation to close the D-Bus call
         invocation.return_value(None)
 
     def handle_get_property(
-        self,
         connection: Gio.DBusConnection,
         sender: str,
         object_path: str,
         interface_name: str,
         property_name: str,
     ) -> Optional[GLib.Variant]:
-        """Tells GNOME the current state of our player."""
         from lib.state.player_state import PlayState
 
         if interface_name == "org.mpris.MediaPlayer2":
@@ -128,14 +126,12 @@ class MPRISController:
         if interface_name == "org.mpris.MediaPlayer2.Player":
             if property_name == "PlaybackStatus":
                 status: str = (
-                    "Playing"
-                    if self.state.state.value == PlayState.PLAYING
-                    else "Paused"
+                    "Playing" if state.state.value == PlayState.PLAYING else "Paused"
                 )
                 return GLib.Variant("s", status)
 
             if property_name == "Metadata":
-                return GLib.Variant("a{sv}", self.get_metadata())
+                return GLib.Variant("a{sv}", get_metadata())
 
             if property_name in [
                 "CanGoNext",
@@ -149,7 +145,6 @@ class MPRISController:
         return None
 
     def handle_set_property(
-        self,
         connection: Gio.DBusConnection,
         sender: str,
         object_path: str,
@@ -157,48 +152,53 @@ class MPRISController:
         property_name: str,
         value: GLib.Variant,
     ) -> bool:
-        """Handles external attempts to modify properties."""
-        return False  # We don't support external property setting
+        return False  # External property setting not supported
 
-    def get_metadata(self) -> Dict[str, GLib.Variant]:
-        """Constructs the MPRIS Metadata dictionary."""
-        # MPRIS length expects microseconds. GStreamer yields nanoseconds.
-        length_us: int = self.state.current_song.total_time.value // 1000
+    # --- Register with D-Bus ---
 
-        return {
-            "mpris:trackid": GLib.Variant("s", "/org/mpris/MediaPlayer2/Track/Current"),
-            "xesam:title": GLib.Variant("s", self.state.current_song.title.value),
-            "xesam:artist": GLib.Variant("as", [self.state.current_song.artist.value]),
-            "mpris:length": GLib.Variant("x", length_us),
-        }
+    for interface in node_info.interfaces:
+        con.register_object(
+            "/org/mpris/MediaPlayer2",
+            interface,
+            handle_method_call,
+            handle_get_property,
+            handle_set_property,
+        )
 
-    # --- PropertiesChanged Signal Emitters ---
+    Gio.bus_own_name_on_connection(
+        con,
+        "org.mpris.MediaPlayer2.MyApp",
+        Gio.BusNameOwnerFlags.NONE,
+        None,
+        None,
+    )
 
-    def on_playback_status_changed(self, play_state: "PlayState") -> None:
-        """Reactive callback triggered by RxPY subject."""
+    # --- Reactive Subscriptions ---
+
+    def on_playback_status_changed(play_state: "PlayState") -> None:
         from lib.state.player_state import PlayState
 
         status: str = "Playing" if play_state == PlayState.PLAYING else "Paused"
-        self._emit_properties_changed(
+        emit_properties_changed(
             "org.mpris.MediaPlayer2.Player",
             {"PlaybackStatus": GLib.Variant("s", status)},
         )
 
-    def on_metadata_changed(self, _: Any) -> None:
-        """Reactive callback triggered by RxPY combine_latest."""
-        self._emit_properties_changed(
+    def on_metadata_changed(_: Any) -> None:
+        emit_properties_changed(
             "org.mpris.MediaPlayer2.Player",
-            {"Metadata": GLib.Variant("a{sv}", self.get_metadata())},
+            {"Metadata": GLib.Variant("a{sv}", get_metadata())},
         )
 
-    def _emit_properties_changed(
-        self, interface_name: str, changed_props: Dict[str, GLib.Variant]
-    ) -> None:
-        """Broadcasts state changes to the system so the UI updates instantly."""
-        self.con.emit_signal(
-            None,
-            "/org/mpris/MediaPlayer2",
-            "org.freedesktop.DBus.Properties",
-            "PropertiesChanged",
-            GLib.Variant("(sa{sv}as)", (interface_name, changed_props, [])),
-        )
+    def on_current_changed(current: Optional["CurrentMusic"]) -> None:
+        if not current:
+            return
+        combine_latest(
+            current.title,
+            current.artist,
+            current.total_time,
+        ).subscribe(on_metadata_changed)
+
+    # Attach listeners to the state
+    state.state.subscribe(on_playback_status_changed)
+    state.current.subscribe(on_current_changed)

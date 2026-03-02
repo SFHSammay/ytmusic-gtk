@@ -10,8 +10,6 @@ from gi.repository import GLib, Gst
 from reactivex.subject import BehaviorSubject, Subject
 from reactivex import operators as ops
 
-from lib.sys.MPRISController import MPRISController
-
 
 # Enum for the player state
 class PlayState(enum.Enum):
@@ -47,7 +45,7 @@ class PlayerState:
         default_factory=lambda: BehaviorSubject(PlayState.EMPTY)
     )
 
-    current_song: BehaviorSubject[Optional[CurrentMusic]] = field(
+    current: BehaviorSubject[Optional[CurrentMusic]] = field(
         default_factory=lambda: BehaviorSubject[Optional[CurrentMusic]](None)
     )
 
@@ -61,11 +59,13 @@ class PlayerState:
     )
 
 
-def setup_player(state: PlayerState) -> tuple[Gst.Element, MPRISController]:
+def setup_player(state: PlayerState) -> Gst.Element:
     """
     Initializes the GStreamer player and MPRIS controller, binding them to
     the given PlayerState via functional reactive streams.
     """
+    from lib.sys.MPRISController import setup_mpris_controller
+
     if not Gst.is_initialized():
         Gst.init(None)
 
@@ -81,8 +81,6 @@ def setup_player(state: PlayerState) -> tuple[Gst.Element, MPRISController]:
     flags &= ~(1 << 0)
     player.set_property("flags", flags)
 
-    mpris_controller = MPRISController(state)
-
     def on_audio_file_changed(file_path: pathlib.Path | None) -> None:
         if file_path:
             player.set_state(Gst.State.READY)
@@ -92,30 +90,29 @@ def setup_player(state: PlayerState) -> tuple[Gst.Element, MPRISController]:
         else:
             player.set_state(Gst.State.NULL)
 
-    state.current_song.pipe(
+    state.current.pipe(
         ops.map(lambda s: s.audio_file if s else None), ops.distinct_until_changed()
     ).subscribe(on_audio_file_changed)
 
     def on_state_changed(s: PlayState) -> None:
-        has_audio = state.current_song.value and state.current_song.value.audio_file
+        has_audio = state.current.value and state.current.value.audio_file
         if not has_audio:
             if s == PlayState.EMPTY:
                 player.set_state(Gst.State.NULL)
-                state.current_time.on_next(0)
-                state.total_time.on_next(0)
+                state.current.on_next(None)
             return
 
         if s == PlayState.PLAYING:
             player.set_state(Gst.State.PLAYING)
         elif s == PlayState.PAUSED or s == PlayState.LOADING:
             player.set_state(Gst.State.PAUSED)
-            if s == PlayState.LOADING:
-                state.current_time.on_next(0)
-                state.total_time.on_next(0)
+            if s == PlayState.LOADING and state.current.value:
+                # Reset time to 0 when loading new track
+                state.current.value.current_time.on_next(0)
+
         elif s == PlayState.EMPTY:
             player.set_state(Gst.State.NULL)
-            state.current_time.on_next(0)
-            state.total_time.on_next(0)
+            state.current.on_next(None)
 
     state.state.subscribe(on_state_changed)
 
@@ -125,16 +122,21 @@ def setup_player(state: PlayerState) -> tuple[Gst.Element, MPRISController]:
     state.volume.subscribe(on_volume_changed)
 
     def update_time_state() -> bool:
+        # Only update time if we're currently playing, to avoid unnecessary queries when paused
+        if not state.current.value:
+            return True  # Keep timeout alive
+        current = state.current.value
+
         if state.state.value == PlayState.PLAYING:
             # Query position
             success_pos, pos = player.query_position(Gst.Format.TIME)
             if success_pos:
-                state.current_time.on_next(pos)
+                current.current_time.on_next(pos)
 
             # Query total duration
             success_dur, dur = player.query_duration(Gst.Format.TIME)
             if success_dur:
-                state.total_time.on_next(dur)
+                current.total_time.on_next(dur)
         return True  # Keep timeout alive
 
     GLib.timeout_add(500, update_time_state)
@@ -146,9 +148,14 @@ def setup_player(state: PlayerState) -> tuple[Gst.Element, MPRISController]:
     bus.add_signal_watch()
 
     def on_bus_message(bus: Gst.Bus, message: Gst.Message) -> None:
+        # If current is None, we have no track loaded, so ignore messages
+        if not state.current.value:
+            return
+        current = state.current.value
         if message.type == Gst.MessageType.EOS:
             state.state.on_next(PlayState.PAUSED)
-            state.current_time.on_next(0)
+            # state.current_time.on_next(0)
+            current.current_time.on_next(0)
             player.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH, 0)
         elif message.type == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
@@ -158,11 +165,21 @@ def setup_player(state: PlayerState) -> tuple[Gst.Element, MPRISController]:
     bus.connect("message", on_bus_message)
 
     def on_seek_request(position_ns: int) -> None:
+        if not state.current.value:
+            return
         player.seek_simple(
             Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT, position_ns
         )
-        state.current_time.on_next(position_ns)
+        state.current.value.current_time.on_next(position_ns)
 
-    state.seek_request.subscribe(on_seek_request)
+    def on_current(current: Optional[CurrentMusic]) -> None:
+        if not current:
+            return
+        current.seek_request.subscribe(on_seek_request)
 
-    return player, mpris_controller
+    # state.seek_request.subscribe(on_seek_request)
+    state.current.subscribe(on_current)
+
+    setup_mpris_controller(state)
+
+    return player

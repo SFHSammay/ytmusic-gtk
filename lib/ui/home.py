@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+from lib.state.player_state import CurrentMusic
 from utils import load_thumbnail
 from typing import cast
 from typing import Any
@@ -194,40 +196,64 @@ def HomeItemCard(
     def on_card_click(gesture: Gtk.GestureClick, n_press: int, x: float, y: float):
         logging.info(f"Clicked on card: {item}")
 
-        if item.video_id and player_state.id.value == item.video_id:
-            current_state = player_state.state.value
-            if current_state == PlayState.PLAYING:
+        if (
+            player_state.current.value
+            and item.video_id
+            and player_state.current.value.id == item.video_id
+        ):
+            # current_state = player_state.state.value
+            if player_state.state == PlayState.PLAYING:
                 player_state.state.on_next(PlayState.PAUSED)
                 return
-            elif current_state == PlayState.PAUSED:
+            elif player_state.state == PlayState.PAUSED:
                 player_state.state.on_next(PlayState.PLAYING)
                 return
-            elif current_state == PlayState.LOADING:
+            elif player_state.state == PlayState.LOADING:
                 return
-
+        # We are going to create a new current music object
         # Set to loading
         player_state.state.on_next(PlayState.LOADING)
         # 1. Update UI immediately with what we already have (Immediate Feedback)
-        player_state.title.on_next(item.title)
-        # Set id
-        if item.video_id:
-            player_state.id.on_next(item.video_id)
+        # player_state.title.on_next(item.title)
+        # # Set id
+        # if item.video_id:
+        #     player_state.id.on_next(item.video_id)
+        # it item doesn't have a video id, we can't play it
+        if not item.video_id:
+            logging.warning("Item has no video ID, cannot play.")
+            return
+        title = "Unknown"
+        if item.title:
+            title = item.title
+        video_id = item.video_id
 
         creator = "Unknown"
         if item.artists:
             creator = item.artists[0].name
         elif item.author:
             creator = item.author[0].name
-        player_state.artist.on_next(creator)
-        player_state.album_name.on_next(item.album.name if item.album else "")
-
+        album_name = "Unknown"
+        if item.album:
+            album_name = item.album.name
+        thumb_url = ""
         if item.thumbnails:
             thumb_url = (
                 item.thumbnails[-1].url
                 if isinstance(item.thumbnails, list)
                 else item.thumbnails
             )
-            player_state.album_art.on_next(thumb_url)
+            current = {
+                "title": BehaviorSubject(title),
+                "id": BehaviorSubject(video_id),
+                "artist": BehaviorSubject(creator),
+                "album_name": BehaviorSubject(album_name),
+                "album_art": BehaviorSubject(thumb_url),
+                "current_time": BehaviorSubject(0),
+                "total_time": BehaviorSubject(0),
+                "seek_request": Subject(),
+            }
+
+            player_state.current.on_next(CurrentMusic(**current))
 
         # 2. Background Fetch for additional details
         def fetch_details():
