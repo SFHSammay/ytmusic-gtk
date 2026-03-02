@@ -78,6 +78,9 @@ class CurrentPlaylist:
 class PlayerState:
     """Holds all reactive state and playing logic for the app."""
 
+    yt: BehaviorSubject[Optional["ytmusicapi.YTMusic"]] = field(
+        default_factory=lambda: BehaviorSubject[Optional[ytmusicapi.YTMusic]](None)
+    )
     state: BehaviorSubject[PlayState] = field(
         default_factory=lambda: BehaviorSubject(PlayState.EMPTY)
     )
@@ -171,12 +174,16 @@ def get_audio_file(yt: "ytmusicapi.YTMusic", video_id: str) -> pathlib.Path:
 
 def start_play(
     state: PlayerState,
-    yt: "ytmusicapi.YTMusic",
     video_id: Optional[str] = None,
     playlist_id: Optional[str] = None,
     initial_temp_music: Optional[MediaStatus] = None,
 ) -> None:
     import threading
+
+    yt = state.yt.value
+    if not yt:
+        logging.error("No YTMusic instance available.")
+        return
 
     # If there is no video_id nor playlist_id, we can't play anything
     if not video_id and not playlist_id and not initial_temp_music:
@@ -193,6 +200,9 @@ def start_play(
     def fetch_details() -> None:
         try:
             raw_playlist = None
+
+            if not yt:
+                return
 
             if playlist_id and not playlist_id.startswith("RD"):
                 logging.info(f"Fetching playlist details for {playlist_id}")
@@ -231,6 +241,8 @@ def start_play(
                 media_list.append(status)
 
             first_song = media_list[0]
+            if not yt:
+                return
             audio_file = get_audio_file(yt, first_song.id)
             logging.info(f"Audio file: {audio_file}")
 
@@ -246,6 +258,46 @@ def start_play(
             logging.error(f"Could not fetch or download media: {e}")
 
     threading.Thread(target=fetch_details, daemon=True).start()
+
+
+def play_next(state: PlayerState) -> None:
+    media_list = state.playlist.media.value
+    if not media_list:
+        return
+    idx = state.playlist.index.value
+    if state.shuffle_on.value:
+        import random
+
+        next_idx = random.randint(0, len(media_list) - 1)
+    else:
+        next_idx = idx + 1
+        if next_idx >= len(media_list):
+            if state.repeat_on.value:
+                next_idx = 0
+            else:
+                state.state.on_next(PlayState.PAUSED)
+                state.stream.current_time.on_next(0)
+                return
+    state.playlist.index.on_next(next_idx)
+
+
+def play_previous(state: PlayerState) -> None:
+    media_list = state.playlist.media.value
+    if not media_list:
+        return
+    idx = state.playlist.index.value
+    if state.shuffle_on.value:
+        import random
+
+        next_idx = random.randint(0, len(media_list) - 1)
+    else:
+        next_idx = idx - 1
+        if next_idx < 0:
+            if state.repeat_on.value:
+                next_idx = len(media_list) - 1
+            else:
+                next_idx = 0
+    state.playlist.index.on_next(next_idx)
 
 
 def setup_player(state: PlayerState) -> Gst.Element:
@@ -345,10 +397,7 @@ def setup_player(state: PlayerState) -> Gst.Element:
         if not state.current_item:
             return
         if message.type == Gst.MessageType.EOS:
-            state.state.on_next(PlayState.PAUSED)
-            # state.current_time.on_next(0)
-            state.stream.current_time.on_next(0)
-            player.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH, 0)
+            play_next(state)
         elif message.type == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
             logging.error(f"GStreamer Error: {err}, {debug}")
@@ -364,12 +413,36 @@ def setup_player(state: PlayerState) -> Gst.Element:
         )
         state.stream.current_time.on_next(position_ns)
 
+    state.stream.seek_request.subscribe(on_seek_request)
+
     def on_current(current: Optional[MediaStatus]) -> None:
         if not current:
             return
-        state.stream.seek_request.subscribe(on_seek_request)
 
-    # state.seek_request.subscribe(on_seek_request)
+        yt_instance = state.yt.value
+        if not current.audio_file.value and yt_instance:
+            state.state.on_next(PlayState.LOADING)
+            import threading
+
+            current_id = current.id
+            if not current_id:
+                return
+
+            def fetch_audio() -> None:
+                if not yt_instance or not current:
+                    return
+                try:
+                    audio_file = get_audio_file(yt_instance, current_id)
+                    cur_audio = current.audio_file
+                    if cur_audio:
+                        cur_audio.on_next(audio_file)
+                    state.state.on_next(PlayState.PLAYING)
+                except Exception as e:
+                    logging.error(f"Could not fetch audio for {current_id}: {e}")
+                    play_next(state)
+
+            threading.Thread(target=fetch_audio, daemon=True).start()
+
     state.current.subscribe(on_current)
 
     setup_mpris_controller(state)

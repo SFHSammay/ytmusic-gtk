@@ -32,7 +32,7 @@ class YTMusicWindow(Adw.ApplicationWindow):
         self.set_default_size(900, 700)
         self.set_title("YT Music")
 
-        self.player_state = PlayerState()
+        self.player_state = PlayerState(yt=yt_subject)
         self._player = setup_player(self.player_state)
 
         # ROOT CONTAINER (Anchors the PlayBar globally)

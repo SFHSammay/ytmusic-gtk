@@ -8,7 +8,7 @@ from lib.state.player_state import PlayState
 from typing import Optional
 from gi.repository import Gtk, GLib, Adw, Pango, Gst
 from reactivex import combine_latest
-from lib.state.player_state import PlayerState
+from lib.state.player_state import PlayerState, play_next, play_previous
 
 
 def PlayerProgressBar(
@@ -119,6 +119,8 @@ def PlayControls(state: PlayerState) -> Gtk.Widget:
             state.state.on_next(PlayState.PLAYING)
 
     play_pause_btn.connect("clicked", toggle_play)
+    prev_btn.connect("clicked", lambda _: play_previous(state))
+    next_btn.connect("clicked", lambda _: play_next(state))
 
     # state.current.subscribe(on_current)
     combine_latest(state.stream.current_time, state.stream.total_time).subscribe(

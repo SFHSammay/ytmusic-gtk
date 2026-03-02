@@ -104,9 +104,14 @@ def setup_mpris_controller(state: "PlayerState") -> None:
                 state.state.on_next(PlayState.PLAYING)
             elif method_name == "Pause":
                 state.state.on_next(PlayState.PAUSED)
-            elif method_name in ("Next", "Previous"):
-                # Add logic to skip tracks if you implement a queue in PlayerState
-                pass
+            elif method_name == "Next":
+                from lib.state.player_state import play_next
+
+                play_next(state)
+            elif method_name == "Previous":
+                from lib.state.player_state import play_previous
+
+                play_previous(state)
 
         invocation.return_value(None)
 

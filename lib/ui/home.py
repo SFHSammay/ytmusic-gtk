@@ -218,7 +218,6 @@ def HomeItemCard(
             video_id = item.video_id
             start_play(
                 state=player_state,
-                yt=yt,
                 playlist_id=item.playlist_id,
                 video_id=video_id,
             )
@@ -259,7 +258,6 @@ def HomeItemCard(
         start_play(
             state=player_state,
             video_id=item.video_id,
-            yt=yt,
             playlist_id=item.playlist_id,
             initial_temp_music=new_music,
         )
