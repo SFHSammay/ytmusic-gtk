@@ -16,6 +16,10 @@ class PlayerState:
         default_factory=lambda: BehaviorSubject(False)
     )
 
+    id: BehaviorSubject[Optional[str]] = field(
+        default_factory=lambda: BehaviorSubject[Optional[str]](None)
+    )
+
     # Track Info
     title: BehaviorSubject[str] = field(
         default_factory=lambda: BehaviorSubject(

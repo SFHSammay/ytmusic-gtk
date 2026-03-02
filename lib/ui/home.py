@@ -69,8 +69,11 @@ def HomeItemCard(
         if thumb.width and thumb.height:
             aspect_ratio = thumb.width / thumb.height
 
+    width = int(IMAGE_SIZE * aspect_ratio)
+    height = IMAGE_SIZE
+
     card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-    card.set_size_request(IMAGE_SIZE, -1)
+    card.set_size_request(width, height + 100)  # Extra height for text below the image
     card.set_halign(Gtk.Align.START)
     card.set_valign(Gtk.Align.START)
 
@@ -80,9 +83,7 @@ def HomeItemCard(
         True
     )  # Crucial: Stops high-res network images from blowing up the UI
     img.set_content_fit(Gtk.ContentFit.COVER)
-    img.set_size_request(
-        int(IMAGE_SIZE * aspect_ratio), IMAGE_SIZE
-    )  # Maintain aspect ratio
+    img.set_size_request(width, height)  # Maintain aspect ratio
     img.add_css_class("card")  # Adds nice Adwaita rounding to the image
 
     load_thumbnail(img, item.thumbnails)
@@ -90,24 +91,41 @@ def HomeItemCard(
     text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
     text_box.set_margin_start(4)  # Indents text slightly from the left edge
     text_box.set_margin_end(4)  # Prevents text from hitting the hard right edge
-    text_box.set_margin_bottom(24)  # Gives the bottom of the card some breathing room
+    # text_box.set_margin_bottom(24)  # Gives the bottom of the card some breathing room
 
     title_lbl = Gtk.Label(label=item.title)
     title_lbl.set_halign(Gtk.Align.START)
+    title_lbl.set_xalign(0.0)
+
+    # This combination forces the 2-line height
     title_lbl.set_wrap(True)
     title_lbl.set_lines(2)
     title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+
+    # Ensure the label doesn't try to expand horizontally beyond the image
+    title_lbl.set_width_chars(1)
     title_lbl.set_max_width_chars(1)
-    title_lbl.set_size_request(IMAGE_SIZE, -1)
+
     title_lbl.add_css_class("heading")
 
     creator = item.artists[0].name if item.artists else "Unknown"
     subtitle_lbl = Gtk.Label(label=creator)
+
+    # 1. Align the widget within its parent container to the left
     subtitle_lbl.set_halign(Gtk.Align.START)
+
+    # 2. Align the text within the label's own allocation to the left
+    subtitle_lbl.set_xalign(0.0)
+
     subtitle_lbl.add_css_class("dim-label")
     subtitle_lbl.add_css_class("caption")
+
+    # 3. Handling overflow
     subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
-    subtitle_lbl.set_max_width_chars(1)
+
+    # 4. Ensure it doesn't push the card wider than the image
+    subtitle_lbl.set_width_chars(1)
+    subtitle_lbl.set_hexpand(True)
     subtitle_lbl.set_size_request(IMAGE_SIZE, -1)
 
     text_box.append(title_lbl)
@@ -123,6 +141,9 @@ def HomeItemCard(
 
         # 1. Update UI immediately with what we already have (Immediate Feedback)
         player_state.title.on_next(item.title)
+        # Set id
+        if item.video_id:
+            player_state.id.on_next(item.video_id)
 
         creator = "Unknown"
         if item.artists:
