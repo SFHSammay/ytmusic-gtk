@@ -1,7 +1,9 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:venv",
     "cSpell.words": [
+        "pygobject",
         "reactivex",
+        "ytmusic",
         "ytmusicapi"
     ]
 }
