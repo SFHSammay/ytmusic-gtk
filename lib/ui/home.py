@@ -110,12 +110,12 @@ def HomeItemCard(
     play_icon.set_hexpand(True)
     play_icon.set_vexpand(True)
 
-    play_spinner = Adw.Spinner() if hasattr(Adw, "Spinner") else Gtk.Spinner()
+    play_spinner = Adw.Spinner()
     play_spinner.set_halign(Gtk.Align.CENTER)
     play_spinner.set_valign(Gtk.Align.CENTER)
     play_spinner.set_hexpand(True)
     play_spinner.set_vexpand(True)
-    play_spinner.set_size_request(32, 32)
+    play_spinner.set_size_request(24, 24)
 
     play_stack = Gtk.Stack()
     play_stack.add_named(play_icon, "icon")
@@ -339,14 +339,14 @@ def HomeItemCard(
                 player_state.current.on_next(
                     CurrentMusic(
                         id=video_id,
-                        audio_file=latest_file,
+                        audio_file=BehaviorSubject(latest_file),
                         title=title,
                         artist=creator,
                         album_name=album_name,
                         year=None,
                         album_art=thumb_url,
-                        is_liked=False,
-                        is_disliked=False,
+                        is_liked=BehaviorSubject(False),
+                        is_disliked=BehaviorSubject(False),
                     )
                 )
                 # set play to true

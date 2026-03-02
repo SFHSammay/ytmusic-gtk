@@ -206,17 +206,21 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
             return
         for btn in (dislike_btn, like_btn, more_btn):
             btn.set_sensitive(current != PlayState.EMPTY)
-        toggle_icon(
-            like_btn,
-            current.is_liked,
-            "thumbs-up-symbolic",
-            "thumbs-up-outline-symbolic",
+        current.is_liked.subscribe(
+            lambda val: toggle_icon(
+                like_btn,
+                val,
+                "thumbs-up-symbolic",
+                "thumbs-up-outline-symbolic",
+            )
         )
-        toggle_icon(
-            dislike_btn,
-            current.is_disliked,
-            "thumbs-down-symbolic",
-            "thumbs-down-outline-symbolic",
+        current.is_disliked.subscribe(
+            lambda val: toggle_icon(
+                dislike_btn,
+                val,
+                "thumbs-down-symbolic",
+                "thumbs-down-outline-symbolic",
+            )
         )
         subtitle_label.set_text(
             " • ".join(filter(None, [current.artist, current.album_name, current.year]))
@@ -230,18 +234,18 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
         current = state.current.value
         if not current:
             return
-        current.is_liked = not current.is_liked
-        if current.is_liked and current.is_disliked:
-            current.is_disliked = False
+        current.is_liked.on_next(not current.is_liked.value)
+        if current.is_liked.value and current.is_disliked.value:
+            current.is_disliked.on_next(False)
         state.current.on_next(current)
 
     def on_dislike_clicked(_):
         current = state.current.value
         if not current:
             return
-        current.is_disliked = not current.is_disliked
-        if current.is_disliked and current.is_liked:
-            current.is_liked = False
+        current.is_disliked.on_next(not current.is_disliked.value)
+        if current.is_disliked.value and current.is_liked.value:
+            current.is_liked.on_next(False)
         state.current.on_next(current)
 
     def update_song_info_sensitivity(s: PlayState) -> None:

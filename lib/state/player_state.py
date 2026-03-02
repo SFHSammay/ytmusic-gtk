@@ -1,5 +1,4 @@
 import pathlib
-from typing import Protocol
 import enum
 import logging
 import pathlib
@@ -22,15 +21,21 @@ class PlayState(enum.Enum):
 @dataclass
 class CurrentMusic:
     id: str
-    audio_file: pathlib.Path
+    audio_file: BehaviorSubject[Optional[pathlib.Path]] = field(
+        default_factory=lambda: BehaviorSubject[Optional[pathlib.Path]](None)
+    )
 
     title: Optional[str] = field(default=None)
     artist: Optional[str] = field(default=None)
     album_name: Optional[str] = field(default=None)
     year: Optional[str] = field(default=None)
     album_art: Optional[str] = field(default=None)
-    is_liked: bool = field(default=False)
-    is_disliked: bool = field(default=False)
+    is_liked: BehaviorSubject[bool] = field(
+        default_factory=lambda: BehaviorSubject(False)
+    )
+    is_disliked: BehaviorSubject[bool] = field(
+        default_factory=lambda: BehaviorSubject(False)
+    )
 
 
 @dataclass
@@ -99,12 +104,16 @@ def setup_player(state: PlayerState) -> Gst.Element:
         else:
             player.set_state(Gst.State.NULL)
 
+    import reactivex as rx
+
     state.current.pipe(
-        ops.map(lambda s: s.audio_file if s else None), ops.distinct_until_changed()
+        ops.map(lambda s: s.audio_file if s else rx.just(None)),
+        ops.switch_latest(),
+        ops.distinct_until_changed(),
     ).subscribe(on_audio_file_changed)
 
     def on_state_changed(s: PlayState) -> None:
-        has_audio = state.current.value and state.current.value.audio_file
+        has_audio = state.current.value and state.current.value.audio_file.value
         if not has_audio:
             if s == PlayState.EMPTY:
                 player.set_state(Gst.State.NULL)
