@@ -61,8 +61,10 @@ class YTMusicWindow(Adw.ApplicationWindow):
         root_toolbar_view = Adw.ToolbarView()
         self.set_content(root_toolbar_view)
 
+        show_now_playing = BehaviorSubject(False)
+
         # The PlayBar is securely fastened to the bottom of the window
-        root_toolbar_view.add_bottom_bar(PlayBar(self.player_state))
+        root_toolbar_view.add_bottom_bar(PlayBar(self.player_state, show_now_playing))
 
         # ---------------------------------------------------------
         # 2. THE ANIMATED STACK (Slides up/down between Main and Now Playing)
@@ -140,7 +142,7 @@ class YTMusicWindow(Adw.ApplicationWindow):
             target = "now_playing" if show else "main"
             GLib.idle_add(self.main_stack.set_visible_child_name, target)
 
-        self.player_state.show_now_playing.subscribe(on_nav_state_changed)
+        show_now_playing.subscribe(on_nav_state_changed)
 
         self.fetch_data_async(yt_subject)
 

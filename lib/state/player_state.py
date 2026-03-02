@@ -5,24 +5,6 @@ from typing import Optional
 import pathlib
 
 
-class PlayItem:
-    id: str
-    title: str
-    artist: str
-    album_name: str
-    year: str
-    album_art: str
-    current_time: int
-    total_time: int
-    volume: float
-    is_liked: bool
-    is_disliked: bool
-    shuffle_on: bool
-    repeat_on: bool
-    audio_file: Optional[pathlib.Path]
-    show_now_playing: bool
-
-
 # Enum for the player state
 class PlayState(enum.Enum):
     EMPTY = 0
@@ -81,8 +63,4 @@ class PlayerState:
 
     audio_file: BehaviorSubject[Optional[pathlib.Path]] = field(
         default_factory=lambda: BehaviorSubject[Optional[pathlib.Path]](None)
-    )
-    # Just a place holder for now.
-    show_now_playing: BehaviorSubject[bool] = field(
-        default_factory=lambda: BehaviorSubject(False)
     )
