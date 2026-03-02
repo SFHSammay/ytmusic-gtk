@@ -89,6 +89,35 @@ def play_audio(
     new_music = initial_temp_music or CurrentMusic(id=video_id)
     state.current.on_next(new_music)
 
+    # related = yt.get_song_related(video_id)
+    # logging.debug(f"Related: {related}")
+    playlist = yt.get_watch_playlist(video_id)
+    # logging.debug(f"Watch playlist: {playlist}")
+    import json
+
+    with open("debug_watch_playlist.json", "w") as f:
+        json.dump(playlist, f, indent=4)
+
+    # Try to get the next item in the playlist
+    # tracks = playlist.get("tracks", [])
+    # if tracks and len(tracks) > 1:
+    #     logging.info(f"Next item: {tracks[1]}")
+
+    #     # Get next item's video ID
+    #     next_video_id = tracks[1].get("videoId", None)
+    #     if next_video_id:
+    #         logging.info(f"Next video ID: {next_video_id}")
+    #         # play_audio(state, next_video_id, yt)
+    #         # Check if the next video is in the same playlist
+    #         next_playlist = yt.get_watch_playlist(next_video_id)
+    #         if next_playlist.get("playlistId") == playlist_id:
+    #             logging.info("Next video is in the same playlist")
+    #         else:
+    #             logging.info(
+    #                 f"Next video is in a different playlist: {next_playlist.get('playlistId')}"
+    #             )
+    #             # play_audio(state, next_video_id, yt)
+    # As it turns out, the playlist ID is not consistent between the watch playlist and the playlist details.
     def fetch_details() -> None:
         try:
             data = None
