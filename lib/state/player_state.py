@@ -113,8 +113,13 @@ def setup_player(state: PlayerState) -> tuple[Gst.Element, MPRISController]:
             player.set_state(Gst.State.PLAYING)
         elif s == PlayState.PAUSED or s == PlayState.LOADING:
             player.set_state(Gst.State.PAUSED)
+            if s == PlayState.LOADING:
+                state.current_time.on_next(0)
+                state.total_time.on_next(0)
         elif s == PlayState.EMPTY:
             player.set_state(Gst.State.NULL)
+            state.current_time.on_next(0)
+            state.total_time.on_next(0)
 
     state.state.subscribe(on_state_changed)
 
