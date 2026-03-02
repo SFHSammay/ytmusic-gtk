@@ -37,9 +37,6 @@ from lib.ui.explore import ExplorePage
 from lib.ui.play_bar import PlayBar, PlayerState
 from lib.types import YTMusicSubject
 from lib.ui.home import HomePage
-
-# Assuming these are available in your project structure
-# from lib.data import ExploreData
 from lib.net.client import auto_login
 
 log = logging.getLogger(__name__)
@@ -54,7 +51,7 @@ class YTMusicWindow(Adw.ApplicationWindow):
         self.set_default_size(900, 700)
         self.set_title("YT Music")
 
-        # --- FIX 2: Use ToolbarView with FLAT style to remove the divider ---
+        # Use ToolbarView with FLAT style
         toolbar_view = Adw.ToolbarView()
         toolbar_view.set_top_bar_style(Adw.ToolbarStyle.FLAT)
         self.set_content(toolbar_view)
@@ -67,25 +64,39 @@ class YTMusicWindow(Adw.ApplicationWindow):
         header = Adw.HeaderBar()
         header.set_title_widget(self.switcher)
 
-        # --- FIX 3: pack_start puts the button on the left ---
+        # ---------------------------------------------------------
+        # Header: Left Side (Search)
+        # ---------------------------------------------------------
         self.search_btn = Gtk.ToggleButton()
         self.search_btn.set_icon_name("system-search-symbolic")
         self.search_btn.set_tooltip_text("Search")
         header.pack_start(self.search_btn)
 
+        # ---------------------------------------------------------
+        # Header: Right Side (Hamburger Menu)
+        # ---------------------------------------------------------
+        # 1. Create the menu model
+        menu = Gio.Menu()
+        menu.append("Preferences", "app.preferences")  # Dummy action for future use
+        menu.append("About YT Music", "app.about")
+
+        # 2. Create the menu button
+        self.menu_btn = Gtk.MenuButton()
+        self.menu_btn.set_icon_name("open-menu-symbolic")
+        self.menu_btn.set_menu_model(menu)
+        self.menu_btn.set_tooltip_text("Main Menu")
+        header.pack_end(self.menu_btn)
+        # ---------------------------------------------------------
+
         # Add header to the ToolbarView
         toolbar_view.add_top_bar(header)
 
-        # --- FIX 1: Search Bar Width Setup using Adw.Clamp ---
+        # --- Search Bar Width Setup using Adw.Clamp ---
         self.search_bar = Gtk.SearchBar()
         self.search_entry = Gtk.SearchEntry()
         self.search_entry.set_placeholder_text("Search songs, artists, or albums...")
-
-        # Tell the entry to greedily take up available horizontal space
         self.search_entry.set_hexpand(True)
 
-        # Use Adw.Clamp to make the search bar wide but prevent it from
-        # stretching infinitely on ultrawide monitors
         clamp = Adw.Clamp()
         clamp.set_maximum_size(450)
         clamp.set_child(self.search_entry)
@@ -129,17 +140,12 @@ class YTMusicWindow(Adw.ApplicationWindow):
         query = entry.get_text()
         if not query.strip():
             return
-
         logging.info(f"User searched for: {query}")
-
-        # Close the search bar after pressing enter (optional, up to your UX preference)
-        # self.search_bar.set_search_mode(False)
 
     def fetch_data_async(self, yt_subject: YTMusicSubject):
         def task():
             try:
                 yt = auto_login()
-
                 if not yt:
                     return
                 yt_subject.on_next(yt)
@@ -153,36 +159,68 @@ class YTMusicWindow(Adw.ApplicationWindow):
 class YTMusicApp(Adw.Application):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Add startup connection
         self.connect("startup", self.on_startup)
         self.connect("activate", self.on_activate)
 
-    def on_startup(self, app):
-        # Grab the default display and icon theme
+    def on_startup(self, app: Gtk.Application):
         display = Gdk.Display.get_default()
         if not display:
             logging.warning("Could not get default display for icon theming.")
-            return
-        icon_theme = Gtk.IconTheme.get_for_display(display)
+        else:
+            icon_theme = Gtk.IconTheme.get_for_display(display)
+            base_dir = Path(__file__).parent.resolve()
+            icons_path = str(base_dir / "assets" / "icons")
 
-        # Build the absolute path to your icons directory
-        # Assuming this script is at the root of your project
-        # base_dir = os.path.dirname(os.path.abspath(__file__))
-        base_dir = Path(__file__).parent.resolve()  # Adjust as needed
-        icons_path = str(base_dir / "assets" / "icons")
+            logging.info(f"Looking for icons in: {icons_path}")
+            if not os.path.exists(icons_path):
+                logging.warning(f"Icons path does not exist: {icons_path}")
 
-        logging.info(f"Looking for icons in: {icons_path}")
-        if not os.path.exists(icons_path):
-            logging.warning(f"Icons path does not exist: {icons_path}")
+            icon_theme.add_search_path(icons_path)
+            logging.info(f"Added custom icon path: {icons_path}")
 
-        # Tell GTK to look in this folder for icon names
-        icon_theme.add_search_path(icons_path)
-        logging.info(f"Added custom icon path: {icons_path}")
+        # ---------------------------------------------------------
+        # Setup Application Actions (Menu connections)
+        # ---------------------------------------------------------
+        # 1. About Action
+        about_action = Gio.SimpleAction.new("about", None)
+        about_action.connect("activate", self.on_about_action)
+        self.add_action(about_action)
 
-    def on_activate(self, app):
+        # 2. Preferences Action (Placeholder for now)
+        pref_action = Gio.SimpleAction.new("preferences", None)
+        pref_action.connect("activate", self.on_preferences_action)
+        self.add_action(pref_action)
+        # ---------------------------------------------------------
+
+    def on_activate(self, app: Gtk.Application):
         self.yt_subject = BehaviorSubject[ytmusicapi.YTMusic | None](None)
         self.win = YTMusicWindow(application=app, yt_subject=self.yt_subject)
         self.win.present()
+
+    # ---------------------------------------------------------
+    # Menu Action Callbacks
+    # ---------------------------------------------------------
+    def on_about_action(self, action: Gio.SimpleAction, param: Gio.ActionGroup):
+        """Displays the Adwaita About Window."""
+        about = Adw.AboutWindow(
+            application_name="YT Music",
+            application_icon="com.example.YTMusicApp",  # Ensure you have an icon matching this ID
+            developer_name="Your Name",
+            version="1.0.0",
+            copyright="© 2026 Your Name",
+            website="https://github.com/yourusername/ytmusic",
+            issue_url="https://github.com/yourusername/ytmusic/issues",
+        )
+        # Attach the about window to the main app window so it behaves as a modal
+        about.set_transient_for(self.get_active_window())
+        about.present()
+
+    def on_preferences_action(self, action, param):
+        """Placeholder for a preferences window."""
+        logging.info("Preferences menu item clicked.")
+        # E.g., Adw.PreferencesWindow().present()
+
+    # ---------------------------------------------------------
 
 
 if __name__ == "__main__":
