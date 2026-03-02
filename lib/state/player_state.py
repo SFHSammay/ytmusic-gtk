@@ -40,12 +40,6 @@ class MediaStatus:
     like_status: BehaviorSubject[LikeStatus] = field(
         default_factory=lambda: BehaviorSubject(LikeStatus.NONE)
     )
-    # is_liked: BehaviorSubject[bool] = field(
-    #     default_factory=lambda: BehaviorSubject(False)
-    # )
-    # is_disliked: BehaviorSubject[bool] = field(
-    #     default_factory=lambda: BehaviorSubject(False)
-    # )
 
 
 @dataclass
@@ -98,15 +92,6 @@ def play_audio(
     new_music = initial_temp_music or MediaStatus(id=video_id)
     state.current.on_next(new_music)
 
-    # related = yt.get_song_related(video_id)
-    # logging.debug(f"Related: {related}")
-    playlist = yt.get_watch_playlist(video_id)
-    # logging.debug(f"Watch playlist: {playlist}")
-    import json
-
-    with open("debug_watch_playlist.json", "w") as f:
-        json.dump(playlist, f, indent=4)
-
     # Try to get the next item in the playlist
     # tracks = playlist.get("tracks", [])
     # if tracks and len(tracks) > 1:
@@ -130,6 +115,16 @@ def play_audio(
     def fetch_details() -> None:
         try:
             data = None
+
+            # related = yt.get_song_related(video_id)
+            # logging.debug(f"Related: {related}")
+            playlist = yt.get_watch_playlist(video_id)
+            # logging.debug(f"Watch playlist: {playlist}")
+            import json
+
+            with open("debug_watch_playlist.json", "w") as f:
+                json.dump(playlist, f, indent=4)
+
             if playlist_id and not playlist_id.startswith("RD"):
                 logging.info(f"Fetching playlist details for {playlist_id}")
                 data = yt.get_playlist(playlist_id)
