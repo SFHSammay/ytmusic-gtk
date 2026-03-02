@@ -88,6 +88,40 @@ def HomeItemCard(
 
     load_thumbnail(img, item.thumbnails)
 
+    # Wrap the image in an overlay for the play button
+    overlay = Gtk.Overlay()
+    overlay.set_child(img)
+
+    # Create a proper container for the play button to prevent stretching
+    play_box = Gtk.Box()
+    play_box.set_halign(Gtk.Align.CENTER)
+    play_box.set_valign(Gtk.Align.CENTER)
+    play_box.set_size_request(64, 64)  # Force a strict square size
+    play_box.set_visible(False)  # Hidden by default
+
+    # Add the icon inside the box
+    icon_name = (
+        "media-playback-pause-symbolic"
+        if player_state.playing.value
+        else "media-playback-start-symbolic"
+    )
+    play_icon = Gtk.Image.new_from_icon_name(icon_name)
+    play_icon.set_icon_size(Gtk.IconSize.LARGE)
+    play_icon.set_halign(Gtk.Align.CENTER)
+    play_icon.set_valign(Gtk.Align.CENTER)
+    play_icon.set_hexpand(True)
+    play_icon.set_vexpand(True)
+    player_state.playing.subscribe(
+        lambda is_playing: play_icon.set_from_icon_name(
+            "media-playback-pause-symbolic"
+            if is_playing
+            else "media-playback-start-symbolic"
+        )
+    )
+
+    play_box.append(play_icon)
+    overlay.add_overlay(play_box)
+
     text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
     text_box.set_margin_start(4)  # Indents text slightly from the left edge
     text_box.set_margin_end(4)  # Prevents text from hitting the hard right edge
@@ -131,7 +165,7 @@ def HomeItemCard(
     text_box.append(title_lbl)
     text_box.append(subtitle_lbl)
 
-    card.append(img)
+    card.append(overlay)  # Append the overlay here instead of 'img'
     card.append(text_box)
 
     click = Gtk.GestureClick.new()
@@ -255,6 +289,21 @@ def HomeItemCard(
     card.add_controller(click)
     card.set_cursor(Gdk.Cursor.new_from_name("pointer"))
 
+    def update_playing_state(playing_id: Optional[str]):
+        def do_update():
+            # Check if this card's video matches the currently playing ID
+            if item.video_id and playing_id == item.video_id:
+                play_box.set_visible(True)
+                img.set_opacity(0.5)  # 0.5 looks a bit cleaner than 0.3
+            else:
+                play_box.set_visible(False)
+                img.set_opacity(1.0)  # Restores original brightness
+            return GLib.SOURCE_REMOVE
+
+        GLib.idle_add(do_update)
+
+    # Listen for changes in the player state ID
+    player_state.id.subscribe(on_next=update_playing_state)
     return card
 
 
