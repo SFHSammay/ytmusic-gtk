@@ -1,3 +1,5 @@
+import pathlib
+from typing import Protocol
 import enum
 import logging
 import pathlib
@@ -16,6 +18,24 @@ class PlayState(enum.Enum):
     PLAYING = 1
     PAUSED = 2
     LOADING = 3
+
+
+# CurrentMusic is a Protocol
+class CurrentMusic(Protocol):
+    id: BehaviorSubject[str]
+    audio_file: BehaviorSubject[pathlib.Path]
+
+    title: BehaviorSubject[Optional[str]]
+    artist: BehaviorSubject[Optional[str]]
+    album_name: BehaviorSubject[Optional[str]]
+    year: BehaviorSubject[Optional[str]]
+    album_art: BehaviorSubject[Optional[str]]
+
+    current_time: BehaviorSubject[int]
+    total_time: BehaviorSubject[int]
+    is_liked: BehaviorSubject[bool]
+    is_disliked: BehaviorSubject[bool]
+    seek_request: Subject[int]
 
 
 @dataclass
