@@ -111,7 +111,7 @@ def setup_player(state: PlayerState) -> tuple[Gst.Element, MPRISController]:
             return
         if s == PlayState.PLAYING:
             player.set_state(Gst.State.PLAYING)
-        elif s == PlayState.PAUSED:
+        elif s == PlayState.PAUSED or s == PlayState.LOADING:
             player.set_state(Gst.State.PAUSED)
         elif s == PlayState.EMPTY:
             player.set_state(Gst.State.NULL)

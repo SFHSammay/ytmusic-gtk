@@ -11,9 +11,6 @@ from reactivex import combine_latest
 from lib.state.player_state import PlayerState
 
 
-# --- Functional Components ---
-
-
 def ProgressBar(
     state: PlayerState,
 ) -> Gtk.Widget:

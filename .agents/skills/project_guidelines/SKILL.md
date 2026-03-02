@@ -47,3 +47,7 @@ This primary skill provides the core architectural context and programming guide
 - **Avoid Counting** - Do not use `1.`, `2.`, `3.` etc. in comments. Use simple single line comments instead.
 - **Avoid Deleting Comment** Do not delete unnecessary comments. Even if the comment is not useful, keep it. If it doesn't follow the style guideline, adapt the comment instead of removing it.
 - **Avoid Commenting Obvious Code** Do not comment obvious code. If the code is self-explanatory, do not comment it.
+
+## Misc
+
+- **Prefer Early Return** - Return early if the function doesn't need to do anything else. Or if a value is `None`. This helps reduce the nesting level of the code.
