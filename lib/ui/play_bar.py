@@ -1,71 +1,11 @@
+from lib.state.player_state import PlayState
 from typing import Optional
 from lib.sys.MPRISController import MPRISController
 import pathlib
 import logging
-from dataclasses import dataclass, field
 from gi.repository import Gtk, GLib, Adw, Pango, Gst
-from reactivex.subject import BehaviorSubject
 from reactivex import combine_latest
-
-
-@dataclass
-class PlayerState:
-    """Holds all reactive state for the PlayBar."""
-
-    playing: BehaviorSubject[bool] = field(
-        default_factory=lambda: BehaviorSubject(False)
-    )
-
-    id: BehaviorSubject[Optional[str]] = field(
-        default_factory=lambda: BehaviorSubject[Optional[str]](None)
-    )
-
-    # Track Info
-    title: BehaviorSubject[str] = field(
-        default_factory=lambda: BehaviorSubject(
-            "Nothing is playing. Click a song to get started!"
-        )
-    )
-    artist: BehaviorSubject[str] = field(default_factory=lambda: BehaviorSubject(""))
-    album_name: BehaviorSubject[str] = field(
-        default_factory=lambda: BehaviorSubject("")
-    )
-    year: BehaviorSubject[str] = field(default_factory=lambda: BehaviorSubject(""))
-    album_art: BehaviorSubject[str] = field(
-        default_factory=lambda: BehaviorSubject("audio-x-generic-symbolic")
-    )
-
-    # Timing (Changed to integers for nanoseconds)
-    current_time: BehaviorSubject[int] = field(
-        default_factory=lambda: BehaviorSubject(0)
-    )
-    total_time: BehaviorSubject[int] = field(default_factory=lambda: BehaviorSubject(0))
-
-    # Actions & System
-    volume: BehaviorSubject[float] = field(default_factory=lambda: BehaviorSubject(1.0))
-    is_liked: BehaviorSubject[bool] = field(
-        default_factory=lambda: BehaviorSubject(False)
-    )
-    is_disliked: BehaviorSubject[bool] = field(
-        default_factory=lambda: BehaviorSubject(False)
-    )
-    shuffle_on: BehaviorSubject[bool] = field(
-        default_factory=lambda: BehaviorSubject(False)
-    )
-    repeat_on: BehaviorSubject[bool] = field(
-        default_factory=lambda: BehaviorSubject(False)
-    )
-
-    audio_file: BehaviorSubject[Optional[pathlib.Path]] = field(
-        default_factory=lambda: BehaviorSubject[Optional[pathlib.Path]](None)
-    )
-    # Just a place holder for now.
-    show_now_playing: BehaviorSubject[bool] = field(
-        default_factory=lambda: BehaviorSubject(False)
-    )
-
-
-# --- Helpers ---
+from lib.state.player_state import PlayerState
 
 
 def toggle_css(widget: Gtk.Widget, class_name: str, active: bool) -> None:
@@ -135,6 +75,8 @@ def ProgressBar(state: PlayerState, player: Gst.Element) -> Gtk.Widget:
 
     progress_scale.connect("value-changed", on_scale_changed)
 
+    state.state.subscribe(lambda s: progress_scale.set_sensitive(s != PlayState.EMPTY))
+
     return progress_scale
 
 
@@ -151,8 +93,14 @@ def PlayControls(state: PlayerState) -> Gtk.Widget:
     play_icon = Gtk.Image()
     play_icon.set_pixel_size(24)
 
+    play_spinner = Adw.Spinner() if hasattr(Adw, "Spinner") else Gtk.Spinner()
+
+    play_stack = Gtk.Stack()
+    play_stack.add_named(play_icon, "icon")
+    play_stack.add_named(play_spinner, "spinner")
+
     play_pause_btn = Gtk.Button()
-    play_pause_btn.set_child(play_icon)
+    play_pause_btn.set_child(play_stack)
     play_pause_btn.add_css_class("circular")
     play_pause_btn.set_size_request(48, 48)
 
@@ -168,16 +116,36 @@ def PlayControls(state: PlayerState) -> Gtk.Widget:
     time_label.set_width_chars(14)
     time_label.set_xalign(0.0)
 
-    state.playing.subscribe(
-        lambda is_playing: play_icon.set_from_icon_name(
-            "media-playback-pause-symbolic"
-            if is_playing
-            else "media-playback-start-symbolic"
-        )
-    )
-    play_pause_btn.connect(
-        "clicked", lambda _: state.playing.on_next(not state.playing.value)
-    )
+    def update_play_btn(s: PlayState):
+        if s == PlayState.LOADING:
+            if hasattr(play_spinner, "start"):
+                play_spinner.start()
+            play_stack.set_visible_child_name("spinner")
+        else:
+            if hasattr(play_spinner, "stop"):
+                play_spinner.stop()
+            play_icon.set_from_icon_name(
+                "media-playback-pause-symbolic"
+                if s == PlayState.PLAYING
+                else "media-playback-start-symbolic"
+            )
+            play_stack.set_visible_child_name("icon")
+
+        is_empty = s == PlayState.EMPTY
+        prev_btn.set_sensitive(not is_empty)
+        play_pause_btn.set_sensitive(not is_empty)
+        next_btn.set_sensitive(not is_empty)
+
+    state.state.subscribe(update_play_btn)
+
+    def toggle_play(_):
+        current = state.state.value
+        if current == PlayState.PLAYING:
+            state.state.on_next(PlayState.PAUSED)
+        elif current == PlayState.PAUSED:
+            state.state.on_next(PlayState.PLAYING)
+
+    play_pause_btn.connect("clicked", toggle_play)
 
     combine_latest(state.current_time, state.total_time).subscribe(
         lambda times: time_label.set_text(
@@ -282,6 +250,12 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
         "clicked", lambda _: state.is_disliked.on_next(not state.is_disliked.value)
     )
 
+    def update_song_info_sensitivity(s: PlayState) -> None:
+        for btn in (dislike_btn, like_btn, more_btn):
+            btn.set_sensitive(s != PlayState.EMPTY)
+
+    state.state.subscribe(update_song_info_sensitivity)
+
     return center_clamp
 
 
@@ -372,6 +346,12 @@ def SystemControls(state: PlayerState, player: Gst.Element) -> Gtk.Widget:
         "clicked", lambda _: state.shuffle_on.on_next(not state.shuffle_on.value)
     )
 
+    def update_system_sensitivity(s: PlayState) -> None:
+        for btn in (vol_btn, repeat_btn, shuffle_btn, expand_btn):
+            btn.set_sensitive(s != PlayState.EMPTY)
+
+    state.state.subscribe(update_system_sensitivity)
+
     return right_box
 
 
@@ -418,22 +398,27 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
         if file_path:
             player.set_state(Gst.State.READY)
             player.set_property("uri", file_path.as_uri())
-            if state.playing.value:
+            if state.state.value == PlayState.PLAYING:
                 player.set_state(Gst.State.PLAYING)
         else:
             player.set_state(Gst.State.NULL)
 
     state.audio_file.subscribe(on_audio_file_changed)
 
-    def on_playing_changed(is_playing: bool):
+    def on_state_changed(s: PlayState):
         if not state.audio_file.value:
             return
-        player.set_state(Gst.State.PLAYING if is_playing else Gst.State.PAUSED)
+        if s == PlayState.PLAYING:
+            player.set_state(Gst.State.PLAYING)
+        elif s == PlayState.PAUSED:
+            player.set_state(Gst.State.PAUSED)
+        elif s == PlayState.EMPTY:
+            player.set_state(Gst.State.NULL)
 
-    state.playing.subscribe(on_playing_changed)
+    state.state.subscribe(on_state_changed)
 
     def update_time_state():
-        if state.playing.value:
+        if state.state.value == PlayState.PLAYING:
             # Query position
             success_pos, pos = player.query_position(Gst.Format.TIME)
             if success_pos:
@@ -456,13 +441,13 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
 
     def on_bus_message(bus: Gst.Bus, message: Gst.Message):
         if message.type == Gst.MessageType.EOS:
-            state.playing.on_next(False)
+            state.state.on_next(PlayState.PAUSED)
             state.current_time.on_next(0)
             player.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH, 0)
         elif message.type == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
             logging.error(f"GStreamer Error: {err}, {debug}")
-            state.playing.on_next(False)
+            state.state.on_next(PlayState.PAUSED)
 
     bus.connect("message", on_bus_message)
 

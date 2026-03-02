@@ -8,6 +8,8 @@ from reactivex import combine_latest
 if typing.TYPE_CHECKING:
     from lib.ui.play_bar import PlayerState
 
+from lib.state.player_state import PlayState
+
 # This XML defines the D-Bus API contract GNOME expects from your player
 MPRIS_XML: str = """
 <node>
@@ -71,7 +73,7 @@ class MPRISController:
         )
 
         # Reactive Bindings: Update GNOME when internal state changes
-        self.state.playing.subscribe(self.on_playback_status_changed)
+        self.state.state.subscribe(self.on_playback_status_changed)
         combine_latest(
             self.state.title, self.state.artist, self.state.total_time
         ).subscribe(self.on_metadata_changed)
@@ -89,11 +91,15 @@ class MPRISController:
         """Handles incoming commands from GNOME (e.g. Media Keys)."""
         if interface_name == "org.mpris.MediaPlayer2.Player":
             if method_name == "PlayPause":
-                self.state.playing.on_next(not self.state.playing.value)
+                current = self.state.state.value
+                if current == PlayState.PLAYING:
+                    self.state.state.on_next(PlayState.PAUSED)
+                elif current == PlayState.PAUSED:
+                    self.state.state.on_next(PlayState.PLAYING)
             elif method_name == "Play":
-                self.state.playing.on_next(True)
+                self.state.state.on_next(PlayState.PLAYING)
             elif method_name == "Pause":
-                self.state.playing.on_next(False)
+                self.state.state.on_next(PlayState.PAUSED)
             elif method_name in ("Next", "Previous"):
                 # Add logic to skip tracks if you implement a queue in PlayerState
                 pass
@@ -117,7 +123,11 @@ class MPRISController:
 
         if interface_name == "org.mpris.MediaPlayer2.Player":
             if property_name == "PlaybackStatus":
-                status: str = "Playing" if self.state.playing.value else "Paused"
+                status: str = (
+                    "Playing"
+                    if self.state.state.value == PlayState.PLAYING
+                    else "Paused"
+                )
                 return GLib.Variant("s", status)
 
             if property_name == "Metadata":
@@ -160,9 +170,9 @@ class MPRISController:
 
     # --- PropertiesChanged Signal Emitters ---
 
-    def on_playback_status_changed(self, is_playing: bool) -> None:
+    def on_playback_status_changed(self, play_state: PlayState) -> None:
         """Reactive callback triggered by RxPY subject."""
-        status: str = "Playing" if is_playing else "Paused"
+        status: str = "Playing" if play_state == PlayState.PLAYING else "Paused"
         self._emit_properties_changed(
             "org.mpris.MediaPlayer2.Player",
             {"PlaybackStatus": GLib.Variant("s", status)},

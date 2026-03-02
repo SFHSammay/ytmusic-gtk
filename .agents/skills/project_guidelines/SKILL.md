@@ -9,7 +9,7 @@ This primary skill provides the core architectural context and programming guide
 
 ## Core Technologies
 
-- **UI Framework:** This project uses GTK4 with LibAdw (via `pygobject` bindings). However, it doesn't strictly follows the development guidelines of GNOME.
+- **UI Framework:** This project uses GTK4 with LibAdw (via `pygobject` bindings). However, it doesn't strictly follows the development guidelines of GNOME. You can assume the GTK dev environment is already setup.
 - **Python Version:** Python >= 3.13 (Targeting the absolute latest modern standards).
 - **State Management:** ReactiveX (using the `reactivex` library).
 
@@ -22,6 +22,7 @@ This primary skill provides the core architectural context and programming guide
   - Use built-in generic collections (e.g., `list[str]`, `dict[str, int]`, `tuple[int, ...]`) instead of importing from `typing`.
   - Use Python 3.12+ type parameter syntax (`class MyClass[T]:` or `def generic_func[T](arg: T) -> T:`) for generic definitions.
   - New code MUST pass type checking.
+  - This project uses Pyrefly for type checking. Run `uvx pyrefly check --summarize-errors` to check for type errors.
 
 ## Functional & Reactive State Management
 

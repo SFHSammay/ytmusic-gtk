@@ -18,6 +18,7 @@ from pydantic import TypeAdapter
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from lib.ui.play_bar import PlayerState
+from lib.state.player_state import PlayState
 
 
 class HomeItemData(BaseMedia):
@@ -102,7 +103,7 @@ def HomeItemCard(
     # Add the icon inside the box
     icon_name = (
         "media-playback-pause-symbolic"
-        if player_state.playing.value
+        if player_state.state.value == PlayState.PLAYING
         else "media-playback-start-symbolic"
     )
     play_icon = Gtk.Image.new_from_icon_name(icon_name)
@@ -111,10 +112,10 @@ def HomeItemCard(
     play_icon.set_valign(Gtk.Align.CENTER)
     play_icon.set_hexpand(True)
     play_icon.set_vexpand(True)
-    player_state.playing.subscribe(
-        lambda is_playing: play_icon.set_from_icon_name(
+    player_state.state.subscribe(
+        lambda state: play_icon.set_from_icon_name(
             "media-playback-pause-symbolic"
-            if is_playing
+            if state == PlayState.PLAYING
             else "media-playback-start-symbolic"
         )
     )
@@ -226,7 +227,8 @@ def HomeItemCard(
 
                 with open("debug_fetched_data.json", "w") as f:
                     json.dump(data, f, indent=4)
-
+                # Set to loading
+                player_state.state.on_next(PlayState.LOADING)
                 # Try to get the URL of the song
                 url = data["microformat"]["microformatDataRenderer"]["urlCanonical"]
                 logging.info(f"Canonical URL: {url}")
@@ -277,7 +279,7 @@ def HomeItemCard(
                 # set the file
                 player_state.audio_file.on_next(latest_file)
                 # set play to true
-                player_state.playing.on_next(True)
+                player_state.state.on_next(PlayState.PLAYING)
 
             except Exception as e:
                 logging.error(f"Note: Could not fetch additional metadata: {e}")
