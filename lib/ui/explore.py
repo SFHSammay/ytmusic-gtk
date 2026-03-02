@@ -62,6 +62,245 @@ class ExploreData(BaseModel):
     new_videos: List[NewVideo]
 
 
+def build_trending_list(trending_data: Trending) -> Gtk.Box:
+    """Builds a Top-Charts style vertical list for Trending items."""
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+
+    header = Gtk.Label(label="Trending")
+    header.set_halign(Gtk.Align.START)
+    header.set_margin_start(12)
+    header.add_css_class("title-2")
+    box.append(header)
+
+    list_box = Gtk.ListBox()
+    list_box.add_css_class("boxed-list")  # Native Adwaita rounded list
+    list_box.set_selection_mode(Gtk.SelectionMode.NONE)
+    list_box.set_margin_start(12)
+    list_box.set_margin_end(12)
+
+    for i, item in enumerate(trending_data.items):
+        creator = item.artists[0].name if item.artists else "Unknown"
+        if item.views:
+            creator += f" • {item.views}"
+
+        row = Adw.ActionRow(title=item.title, subtitle=creator)
+
+        # 1. Rank Number
+        rank_lbl = Gtk.Label(label=f"{i + 1}")
+        rank_lbl.set_margin_start(8)
+        rank_lbl.set_margin_end(8)
+        rank_lbl.add_css_class("title-4")
+        rank_lbl.add_css_class("dim-label")
+        row.add_prefix(rank_lbl)
+
+        # 2. Small Thumbnail
+        img = Gtk.Picture()
+        img.set_size_request(48, 48)
+        img.set_can_shrink(True)
+        img.set_content_fit(Gtk.ContentFit.COVER)
+        img.add_css_class("card")  # Rounds the corners slightly
+        if item.thumbnails:
+            load_thumbnail(img, item.thumbnails)
+
+        # Wrap image in a box for margin
+        img_box = Gtk.Box()
+        img_box.set_margin_top(8)
+        img_box.set_margin_bottom(8)
+        img_box.set_margin_end(12)
+        img_box.append(img)
+        row.add_prefix(img_box)
+
+        list_box.append(row)
+
+    box.append(list_box)
+    return box
+
+
+def build_top_episodes_list(episodes: List[TopEpisode]) -> Gtk.Box:
+    """Builds a vertical list of wide cards for podcasts, showing descriptions."""
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+
+    header = Gtk.Label(label="Top Episodes")
+    header.set_halign(Gtk.Align.START)
+    header.set_margin_start(12)
+    header.add_css_class("title-2")
+    box.append(header)
+
+    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+    vbox.set_margin_start(12)
+    vbox.set_margin_end(12)
+
+    for ep in episodes:
+        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        card.add_css_class("card")  # Make the whole row a distinct card
+        card.set_margin_top(4)
+        card.set_margin_bottom(4)
+
+        # Thumbnail (Square)
+        img = Gtk.Picture()
+        img.set_size_request(120, 120)
+        img.set_content_fit(Gtk.ContentFit.COVER)
+        if ep.thumbnails:
+            load_thumbnail(img, ep.thumbnails)
+        card.append(img)
+
+        # Text Details
+        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        text_box.set_margin_top(12)
+        text_box.set_margin_bottom(12)
+        text_box.set_margin_end(12)
+        text_box.set_hexpand(True)
+
+        title = Gtk.Label(label=ep.title)
+        title.set_halign(Gtk.Align.START)
+        title.set_ellipsize(Pango.EllipsizeMode.END)
+        title.add_css_class("heading")
+
+        desc = Gtk.Label(label=ep.description)
+        desc.set_halign(Gtk.Align.START)
+        desc.set_wrap(True)
+        desc.set_lines(2)
+        desc.set_ellipsize(Pango.EllipsizeMode.END)
+        desc.add_css_class("dim-label")
+
+        meta_text = (
+            f"{ep.podcast.name} • {ep.date} • {ep.duration}"
+            if getattr(ep, "podcast", None)
+            else f"{ep.date} • {ep.duration}"
+        )
+        meta = Gtk.Label(label=meta_text)
+        meta.set_halign(Gtk.Align.START)
+        meta.add_css_class("caption")
+        meta.add_css_class("accent")  # Give the metadata a pop of color
+
+        text_box.append(title)
+        text_box.append(desc)
+
+        # Push meta to the bottom
+        spacer = Gtk.Box()
+        spacer.set_vexpand(True)
+        text_box.append(spacer)
+        text_box.append(meta)
+
+        card.append(text_box)
+        vbox.append(card)
+
+    box.append(vbox)
+    return box
+
+
+def build_video_carousel(title: str, videos: List[NewVideo]) -> Gtk.Box:
+    """Builds a horizontal scrolling carousel tailored for 16:9 video thumbnails."""
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+
+    header = Gtk.Label(label=title)
+    header.set_halign(Gtk.Align.START)
+    header.set_margin_start(12)
+    header.add_css_class("title-2")
+    box.append(header)
+
+    scrolled = Gtk.ScrolledWindow()
+    scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+
+    row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+    row_box.set_margin_start(12)
+    row_box.set_margin_end(12)
+    row_box.set_margin_bottom(16)
+
+    for video in videos:
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        # 16:9 Aspect Ratio
+        width, height = 240, 135
+        card.set_size_request(width, height + 50)
+
+        img = Gtk.Picture()
+        img.set_size_request(width, height)
+        img.set_content_fit(Gtk.ContentFit.COVER)
+        img.add_css_class("card")
+        if video.thumbnails:
+            load_thumbnail(img, video.thumbnails)
+
+        # Video metadata
+        lbl_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        v_title = Gtk.Label(label=video.title)
+        v_title.set_halign(Gtk.Align.START)
+        v_title.set_ellipsize(Pango.EllipsizeMode.END)
+        v_title.set_max_width_chars(30)
+        v_title.add_css_class("heading")
+
+        creator = video.artists[0].name if video.artists else "Unknown"
+        views = f" • {video.views}" if video.views else ""
+        v_sub = Gtk.Label(label=f"{creator}{views}")
+        v_sub.set_halign(Gtk.Align.START)
+        v_sub.set_ellipsize(Pango.EllipsizeMode.END)
+        v_sub.set_max_width_chars(30)
+        v_sub.add_css_class("caption")
+        v_sub.add_css_class("dim-label")
+
+        lbl_box.append(v_title)
+        lbl_box.append(v_sub)
+
+        card.append(img)
+        card.append(lbl_box)
+        row_box.append(card)
+
+    scrolled.set_child(row_box)
+    box.append(scrolled)
+    return box
+
+
+def build_releases_carousel(title: str, releases: List[NewRelease]) -> Gtk.Box:
+    """Standard 1:1 square album carousel for New Releases."""
+    # (This is structurally similar to your original ExploreRow, but optimized for Albums)
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+    header = Gtk.Label(label=title)
+    header.set_halign(Gtk.Align.START)
+    header.set_margin_start(12)
+    header.add_css_class("title-2")
+    box.append(header)
+
+    scrolled = Gtk.ScrolledWindow()
+    scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+    row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+    row_box.set_margin_start(12)
+    row_box.set_margin_end(12)
+    row_box.set_margin_bottom(16)
+
+    for item in releases:
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        card.set_size_request(160, 210)
+
+        img = Gtk.Picture()
+        img.set_size_request(160, 160)
+        img.set_content_fit(Gtk.ContentFit.COVER)
+        img.add_css_class("card")
+        if item.thumbnails:
+            load_thumbnail(img, item.thumbnails)
+
+        title_lbl = Gtk.Label(label=item.title)
+        title_lbl.set_halign(Gtk.Align.START)
+        title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        title_lbl.set_max_width_chars(20)
+        title_lbl.add_css_class("heading")
+
+        creator = item.artists[0].name if item.artists else "Unknown"
+        sub_lbl = Gtk.Label(label=creator)
+        sub_lbl.set_halign(Gtk.Align.START)
+        sub_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        sub_lbl.set_max_width_chars(20)
+        sub_lbl.add_css_class("caption")
+        sub_lbl.add_css_class("dim-label")
+
+        card.append(img)
+        card.append(title_lbl)
+        card.append(sub_lbl)
+        row_box.append(card)
+
+    scrolled.set_child(row_box)
+    box.append(scrolled)
+    return box
+
+
 def ExploreCard(item: BaseMedia, rank: Optional[int] = None) -> Gtk.Box:
     """
     Creates a card widget for a single item in the Explore page.
@@ -272,26 +511,25 @@ def ExplorePage(
 
         # 1. New Releases
         if data.new_releases:
-            explore_box.append(ExploreRow("New Releases", data.new_releases))
+            explore_box.append(
+                build_releases_carousel("New Releases", data.new_releases)
+            )
 
-        # 2. Moods & Genres (Badges)
+        # 2. Moods & Genres (Pill Badges in a FlowBox)
         if data.moods_and_genres:
             explore_box.append(MoodsAndGenresBadges(data.moods_and_genres))
 
-        # 3. Trending (Ranked)
+        # 3. Trending (Native Adwaita Boxed List with Ranks)
         if data.trending and data.trending.items:
-            # We pass is_trending=True to overlay the ranking badge
-            explore_box.append(
-                ExploreRow("Trending", data.trending.items, is_trending=True)
-            )
+            explore_box.append(build_trending_list(data.trending))
 
-        # 4. Top Episodes
+        # 4. Top Episodes (Wide Horizontal Cards)
         if data.top_episodes:
-            explore_box.append(ExploreRow("Top Episodes", data.top_episodes))
+            explore_box.append(build_top_episodes_list(data.top_episodes))
 
-        # 5. New Videos
+        # 5. New Videos (16:9 Aspect Ratio)
         if data.new_videos:
-            explore_box.append(ExploreRow("New Videos", data.new_videos))
+            explore_box.append(build_video_carousel("New Videos", data.new_videos))
 
         return GLib.SOURCE_REMOVE
 
