@@ -130,6 +130,12 @@ class YTMusicWindow(Adw.ApplicationWindow):
         self.stack.add_titled_with_icon(
             ExplorePage(yt_subject), "explore", "Explore", "compass2-symbolic"
         )
+        self.stack.add_titled_with_icon(
+            Gtk.Label(label="Library Coming Soon!"),
+            "library",
+            "Library",
+            "library-symbolic",
+        )
 
         # --- native bottom bar handling for the playbar ---
         toolbar_view.add_bottom_bar(PlayBar(self.player_state))
