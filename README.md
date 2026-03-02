@@ -2,6 +2,7 @@
 
 Yet another YouTube Music client
 
+Built with GTK4 and LibAdwaita.
 
 > [!WARNING]  
 > This is not yet functional!
@@ -12,3 +13,4 @@ Yet another YouTube Music client
 - Login (partial)
 - Playback (partial)
 - Home Page (partial)
+
