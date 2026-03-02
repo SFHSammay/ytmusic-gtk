@@ -5,7 +5,7 @@ Yet another YouTube Music client
 Built with GTK4 and LibAdwaita.
 
 > [!WARNING]  
-> This is not yet functional!
+> This project is currently HIGHLY experimental!
 
 <img width="951" height="757" alt="Screenshot" src="https://github.com/user-attachments/assets/7c536c1c-dd9d-4e7b-96e9-5ac5e6c11b8a" />
 
@@ -13,4 +13,5 @@ Built with GTK4 and LibAdwaita.
 - Login (partial)
 - Playback (partial)
 - Home Page (partial)
+
 
