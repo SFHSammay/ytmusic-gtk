@@ -1,6 +1,5 @@
 ---
-name: YTMusic-GTK Guidelines
-description: Core architectural and styling guidelines for the YTMusic-GTK project.
+trigger: always_on
 ---
 
 # YTMusic-GTK Agent Guidelines
