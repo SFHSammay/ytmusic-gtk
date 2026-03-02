@@ -220,18 +220,22 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
 
     prev_btn = Gtk.Button(icon_name="media-skip-backward-symbolic")
     prev_btn.add_css_class("flat")
+    prev_btn.add_css_class("circular")
+    prev_btn.set_size_request(16, 16)
 
     play_icon = Gtk.Image()
-    play_icon.set_pixel_size(32)
+    play_icon.set_pixel_size(24)
 
     play_pause_btn = Gtk.Button()
     play_pause_btn.set_child(play_icon)
-    play_pause_btn.add_css_class("flat")
-    play_pause_btn.add_css_class("suggested-action")
+    play_pause_btn.add_css_class("circular")
+    # play_pause_btn.add_css_class("suggested-action")
     play_pause_btn.set_size_request(48, 48)
 
     next_btn = Gtk.Button(icon_name="media-skip-forward-symbolic")
     next_btn.add_css_class("flat")
+    next_btn.add_css_class("circular")
+    next_btn.set_size_request(16, 16)
 
     # FIXED: Prevents UI jumping when time strings change length
     time_label = Gtk.Label()
@@ -274,8 +278,8 @@ def PlayBar(state: PlayerState = PlayerState()) -> Gtk.Widget:
 
     # FIXED: Wrap the center content in an Adw.Clamp for automatic max sizing
     center_clamp = Adw.Clamp()
-    center_clamp.set_maximum_size(450)  # The container won't grow larger than 450px
-    center_clamp.set_tightening_threshold(300)
+    center_clamp.set_maximum_size(600)  # The container won't grow larger than 450px
+    center_clamp.set_tightening_threshold(600)
 
     center_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
     center_box.set_valign(Gtk.Align.CENTER)

@@ -1,3 +1,5 @@
+import logging
+import sys
 import typing
 from typing import Optional, Any, Dict, Tuple
 from gi.repository import Gio, GLib
@@ -41,6 +43,9 @@ class MPRISController:
     con: Gio.DBusConnection
 
     def __init__(self, state: "PlayerState") -> None:
+        if sys.platform != "linux":
+            logging.info("Platform is not Linux. MPRIS controller disabled.")
+            return
         self.state = state
         self.node_info = Gio.DBusNodeInfo.new_for_xml(MPRIS_XML)
         self.con = Gio.bus_get_sync(Gio.BusType.SESSION, None)

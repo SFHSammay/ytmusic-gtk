@@ -1,3 +1,4 @@
+from utils import load_thumbnail
 from typing import cast
 from typing import Any
 from lib.env import CACHE_DIR
@@ -68,13 +69,14 @@ def HomeItemCard(
     img.set_can_shrink(True)
     img.set_content_fit(Gtk.ContentFit.COVER)
 
-    if item.thumbnails:
-        thumb_url = (
-            item.thumbnails[-1].url
-            if isinstance(item.thumbnails, list)
-            else item.thumbnails
-        )
-        load_image_async(img, thumb_url)
+    # if item.thumbnails:
+    #     thumb_url = (
+    #         item.thumbnails[-1].url
+    #         if isinstance(item.thumbnails, list)
+    #         else item.thumbnails
+    #     )
+    #     load_image_async(img, thumb_url)
+    load_thumbnail(img, item.thumbnails)
 
     aspect = Gtk.AspectFrame()
     aspect.set_ratio(1.0)

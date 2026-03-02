@@ -1,11 +1,7 @@
 import logging
 from pathlib import Path
-from lib.ui.explore import ExplorePage
-from lib.ui.play_bar import PlayBar, PlayerState
 import ytmusicapi
 from reactivex.subject import BehaviorSubject
-from lib.types import YTMusicSubject
-from lib.ui.home import HomePage
 import logging
 import os
 import sys
@@ -32,8 +28,18 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gst", "1.0")
+gi.require_version("Pango", "1.0")
+gi.require_version("Gio", "2.0")
+gi.require_version("GdkPixbuf", "2.0")
+gi.require_version("Gdk", "4.0")
 
 from gi.repository import Gtk, Adw, Gst, GLib, Pango, Gio, GdkPixbuf, Gdk
+
+
+from lib.ui.explore import ExplorePage
+from lib.ui.play_bar import PlayBar, PlayerState
+from lib.types import YTMusicSubject
+from lib.ui.home import HomePage
 
 # Assuming these are available in your project structure
 # from lib.data import ExploreData
