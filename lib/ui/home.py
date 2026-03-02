@@ -192,9 +192,9 @@ def HomeItemCard(
         logging.info(f"Clicked on card: {item}")
 
         if (
-            player_state.current.value
+            player_state.current_item
             and item.video_id
-            and player_state.current.value.id == item.video_id
+            and player_state.current_item.id == item.video_id
         ):
             # current_state = player_state.state.value
             if player_state.state.value == PlayState.PLAYING:
@@ -227,7 +227,6 @@ def HomeItemCard(
                 if isinstance(item.thumbnails, list)
                 else item.thumbnails
             )
-        like_status = LikeStatus.NONE
         # if hasattr(item, "like_status"):
         #     like_status = item.like_status
         new_music = MediaStatus(
@@ -236,7 +235,7 @@ def HomeItemCard(
             artist=creator,
             album_name=album_name,
             album_art=thumb_url,
-            like_status=BehaviorSubject(like_status),
+            like_status=BehaviorSubject("INDIFFERENT"),
         )
 
         from lib.state.player_state import play_audio

@@ -39,7 +39,7 @@ def PlayerProgressBar(
     )
 
     def on_scale_changed(scale: Gtk.Scale) -> None:
-        if is_updating_scale or not state.current.value:
+        if is_updating_scale or not state.current_item:
             return
 
         val_seconds = scale.get_value()
@@ -205,7 +205,7 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
         current.like_status.subscribe(
             lambda val: toggle_icon(
                 like_btn,
-                val == LikeStatus.LIKE,
+                val == "LIKE",
                 "thumbs-up-symbolic",
                 "thumbs-up-outline-symbolic",
             )
@@ -213,7 +213,7 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
         current.like_status.subscribe(
             lambda val: toggle_icon(
                 dislike_btn,
-                val == LikeStatus.DISLIKE,
+                val == "DISLIKE",
                 "thumbs-down-symbolic",
                 "thumbs-down-outline-symbolic",
             )
@@ -227,23 +227,23 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
     state.current.subscribe(on_current)
 
     def on_like_clicked(_):
-        current = state.current.value
+        current = state.current_item
         if not current:
             return
 
-        if current.like_status.value == LikeStatus.LIKE:
-            current.like_status.on_next(LikeStatus.NONE)
+        if current.like_status.value == "LIKE":
+            current.like_status.on_next("INDIFFERENT")
         else:
-            current.like_status.on_next(LikeStatus.LIKE)
+            current.like_status.on_next("LIKE")
 
     def on_dislike_clicked(_):
-        current = state.current.value
+        current = state.current_item
         if not current:
             return
-        if current.like_status.value == LikeStatus.DISLIKE:
-            current.like_status.on_next(LikeStatus.NONE)
+        if current.like_status.value == "DISLIKE":
+            current.like_status.on_next("INDIFFERENT")
         else:
-            current.like_status.on_next(LikeStatus.DISLIKE)
+            current.like_status.on_next("DISLIKE")
 
     like_btn.connect("clicked", on_like_clicked)
     dislike_btn.connect("clicked", on_dislike_clicked)

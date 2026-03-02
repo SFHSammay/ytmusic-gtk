@@ -1,3 +1,10 @@
+from typing import Any
+from typing import cast
+from lib.sys.env import CACHE_DIR
+from typing import Literal
+from lib.data import SongDetail
+from lib.data import Playlist
+from reactivex import combine_latest
 import pathlib
 import enum
 import logging
@@ -8,6 +15,7 @@ from typing import Optional
 from gi.repository import GLib, Gst
 from reactivex.subject import BehaviorSubject, Subject
 from reactivex import operators as ops
+import reactivex as rx
 import ytmusicapi
 
 
@@ -19,15 +27,14 @@ class PlayState(enum.Enum):
     LOADING = 3
 
 
-class LikeStatus(enum.Enum):
-    NONE = 0
-    LIKE = 1
-    DISLIKE = 2
+LikeStatus = Literal["INDIFFERENT", "LIKE", "DISLIKE"]
 
 
 @dataclass
 class MediaStatus:
     id: str
+    # URL of the song
+    url: Optional[str] = field(default=None)
     audio_file: BehaviorSubject[Optional[pathlib.Path]] = field(
         default_factory=lambda: BehaviorSubject[Optional[pathlib.Path]](None)
     )
@@ -38,7 +45,7 @@ class MediaStatus:
     year: Optional[str] = field(default=None)
     album_art: Optional[str] = field(default=None)
     like_status: BehaviorSubject[LikeStatus] = field(
-        default_factory=lambda: BehaviorSubject(LikeStatus.NONE)
+        default_factory=lambda: BehaviorSubject[LikeStatus]("INDIFFERENT")
     )
 
 
@@ -54,15 +61,22 @@ class StreamStatus:
 
 
 @dataclass
+class CurrentPlaylist:
+    media: BehaviorSubject[list[MediaStatus]] = field(
+        default_factory=lambda: BehaviorSubject([])
+    )
+    index: BehaviorSubject[int] = field(default_factory=lambda: BehaviorSubject(0))
+    name: BehaviorSubject[Optional[str]] = field(
+        default_factory=lambda: BehaviorSubject[Optional[str]](None)
+    )
+
+
+@dataclass
 class PlayerState:
     """Holds all reactive state and playing logic for the app."""
 
     state: BehaviorSubject[PlayState] = field(
         default_factory=lambda: BehaviorSubject(PlayState.EMPTY)
-    )
-
-    current: BehaviorSubject[Optional[MediaStatus]] = field(
-        default_factory=lambda: BehaviorSubject[Optional[MediaStatus]](None)
     )
 
     stream: StreamStatus = field(default_factory=StreamStatus)
@@ -76,129 +90,145 @@ class PlayerState:
         default_factory=lambda: BehaviorSubject(False)
     )
 
+    playlist: CurrentPlaylist = field(default_factory=CurrentPlaylist)
+
+    @property
+    def current(self) -> "rx.Observable[Optional[MediaStatus]]":
+        return combine_latest(self.playlist.media, self.playlist.index).pipe(
+            ops.map(lambda x: x[0][x[1]] if 0 <= x[1] < len(x[0]) else None),
+            ops.distinct_until_changed(),
+        )
+
+    @property
+    def current_item(self) -> Optional[MediaStatus]:
+        media_list = self.playlist.media.value
+        idx = self.playlist.index.value
+        if 0 <= idx < len(media_list):
+            return media_list[idx]
+        return None
+
+
+INFO_CACHE = {}
+
+
+def get_item_info(yt: "ytmusicapi.YTMusic", video_id: str) -> SongDetail:
+    if video_id in INFO_CACHE:
+        return INFO_CACHE[video_id]
+    data = yt.get_song(video_id)
+    song_detail = SongDetail.model_validate(data)
+    INFO_CACHE[video_id] = song_detail
+    return song_detail
+
+
+def get_audio_file(yt: "ytmusicapi.YTMusic", video_id: str) -> pathlib.Path:
+    from yt_dlp import YoutubeDL
+
+    download_dir = CACHE_DIR / "songs" / video_id
+    download_dir.mkdir(parents=True, exist_ok=True)
+
+    logging.info(f"Downloading media to: {download_dir}")
+
+    detail = get_item_info(yt, video_id)
+    url = detail.microformat.microformat_data_renderer.url_canonical
+
+    marker_file = download_dir / "downloaded.txt"
+
+    if not marker_file.exists():
+        with YoutubeDL(
+            params=cast(
+                Any,
+                {
+                    "js_runtimes": {"bun": {}, "node": {}},
+                    "paths": {"home": str(download_dir.absolute())},
+                    "format": "bestaudio/best",
+                    "noplaylist": True,
+                    "quiet": True,
+                    "no_warnings": True,
+                    "outtmpl": {
+                        "default": "%(id)s.%(ext)s",
+                    },
+                },
+            )
+        ) as ydl:
+            ydl.download([url])
+        with open(marker_file, "w") as f:
+            f.write("downloaded")
+
+    audio_files = list(download_dir.glob("*.m4a"))
+    if not audio_files:
+        audio_files = list(download_dir.glob("*.webm"))
+    if not audio_files:
+        audio_files = list(download_dir.glob("*.opus"))
+    if not audio_files:
+        audio_files = list(download_dir.glob("*.mp3"))
+    if not audio_files:
+        raise FileNotFoundError(f"No audio files found in {download_dir}")
+    return audio_files[0]
+
 
 def play_audio(
     state: PlayerState,
-    video_id: str,
     yt: "ytmusicapi.YTMusic",
+    video_id: Optional[str] = None,
     playlist_id: Optional[str] = None,
     initial_temp_music: Optional[MediaStatus] = None,
 ) -> None:
     import threading
-    from typing import cast, Any
-    from lib.sys.env import CACHE_DIR
 
     state.state.on_next(PlayState.LOADING)
-    new_music = initial_temp_music or MediaStatus(id=video_id)
-    state.current.on_next(new_music)
+    if initial_temp_music:
+        state.playlist.media.on_next([initial_temp_music])
+        state.playlist.index.on_next(0)
 
-    # Try to get the next item in the playlist
-    # tracks = playlist.get("tracks", [])
-    # if tracks and len(tracks) > 1:
-    #     logging.info(f"Next item: {tracks[1]}")
-
-    #     # Get next item's video ID
-    #     next_video_id = tracks[1].get("videoId", None)
-    #     if next_video_id:
-    #         logging.info(f"Next video ID: {next_video_id}")
-    #         # play_audio(state, next_video_id, yt)
-    #         # Check if the next video is in the same playlist
-    #         next_playlist = yt.get_watch_playlist(next_video_id)
-    #         if next_playlist.get("playlistId") == playlist_id:
-    #             logging.info("Next video is in the same playlist")
-    #         else:
-    #             logging.info(
-    #                 f"Next video is in a different playlist: {next_playlist.get('playlistId')}"
-    #             )
-    #             # play_audio(state, next_video_id, yt)
-    # As it turns out, the playlist ID is not consistent between the watch playlist and the playlist details.
     def fetch_details() -> None:
         try:
-            data = None
-
-            # related = yt.get_song_related(video_id)
-            # logging.debug(f"Related: {related}")
-            playlist = yt.get_watch_playlist(video_id)
-            # logging.debug(f"Watch playlist: {playlist}")
-            import json
-
-            with open("debug_watch_playlist.json", "w") as f:
-                json.dump(playlist, f, indent=4)
+            raw_playlist = None
 
             if playlist_id and not playlist_id.startswith("RD"):
                 logging.info(f"Fetching playlist details for {playlist_id}")
-                data = yt.get_playlist(playlist_id)
+                raw_playlist = yt.get_playlist(playlist_id)
             elif video_id:
                 logging.info(f"Fetching song details for {video_id}")
-                data = yt.get_song(video_id)
-
-            if not data:
+                raw_playlist = yt.get_watch_playlist(video_id)
+            if not raw_playlist:
                 logging.warning("No additional details found for this item.")
                 return
 
-            # If not provided, try to extract some metadata
-            if not initial_temp_music:
-                try:
-                    video_details = data.get("videoDetails", {})
-                    if video_details:
-                        new_music.title = video_details.get("title", new_music.title)
-                        new_music.artist = video_details.get("author", new_music.artist)
-                        t_info = video_details.get("thumbnail", {}).get(
-                            "thumbnails", []
-                        )
-                        if t_info:
-                            new_music.album_art = t_info[-1].get(
-                                "url", new_music.album_art
-                            )
-                except Exception as meta_e:
-                    logging.warning(f"Failed to extract default metadata: {meta_e}")
+            playlist = Playlist.model_validate(raw_playlist)
 
-            import json
+            media_list = []
+            # Try to fetch song details in a playlist
+            for track in playlist.tracks:
+                id = track.video_id
+                if not id:
+                    continue
+                logging.debug(f"Fetching song details for {id}")
+                # detail = get_item_info(yt, id)
+                status = MediaStatus(
+                    id=id,
+                    # url=track.url,
+                    title=track.title,
+                    # artist=detail.video_details.author,
+                    album_name=track.album.name if track.album else None,
+                    year=track.year,
+                    album_art=track.thumbnails[-1].url if track.thumbnails else None,
+                    like_status=(
+                        BehaviorSubject[LikeStatus](track.like_status)
+                        if track.like_status
+                        else BehaviorSubject[LikeStatus]("INDIFFERENT")
+                    ),
+                )
+                media_list.append(status)
 
-            with open("debug_fetched_data.json", "w") as f:
-                json.dump(data, f, indent=4)
+            first_song = media_list[0]
+            audio_file = get_audio_file(yt, first_song.id)
+            logging.info(f"Audio file: {audio_file}")
 
-            url = data["microformat"]["microformatDataRenderer"]["urlCanonical"]
-            logging.info(f"Canonical URL: {url}")
+            first_song.audio_file.on_next(audio_file)
+            # Update media list
+            state.playlist.media.on_next(media_list)
+            state.playlist.index.on_next(0)
 
-            from yt_dlp import YoutubeDL
-
-            download_dir = CACHE_DIR / "songs" / video_id
-            download_dir.mkdir(parents=True, exist_ok=True)
-
-            logging.info(f"Downloading media to: {download_dir}")
-
-            marker_file = download_dir / "downloaded.txt"
-
-            if not marker_file.exists():
-                with YoutubeDL(
-                    params=cast(
-                        Any,
-                        {
-                            "js_runtimes": {"bun": {}, "node": {}},
-                            "paths": {"home": str(download_dir.absolute())},
-                            "format": "bestaudio/best",
-                            "noplaylist": True,
-                            "quiet": True,
-                        },
-                    )
-                ) as ydl:
-                    ydl.download([url])
-                    marker_file.touch()
-
-            downloaded_files = [
-                f
-                for f in download_dir.glob("*")
-                if f.is_file() and f.name != "downloaded.txt"
-            ]
-            if not downloaded_files:
-                logging.warning(f"No files downloaded to {download_dir}")
-                return
-
-            latest_file = max(downloaded_files, key=lambda f: f.stat().st_mtime)
-            logging.info(f"Latest downloaded file: {latest_file}")
-
-            new_music.audio_file.on_next(latest_file)
             state.state.on_next(PlayState.PLAYING)
 
         except Exception as e:
@@ -247,24 +277,26 @@ def setup_player(state: PlayerState) -> Gst.Element:
     ).subscribe(on_audio_file_changed)
 
     def on_state_changed(s: PlayState) -> None:
-        has_audio = state.current.value and state.current.value.audio_file.value
+        has_audio = state.current_item and state.current_item.audio_file.value
         if not has_audio:
             if s == PlayState.EMPTY:
                 player.set_state(Gst.State.NULL)
-                state.current.on_next(None)
+                state.playlist.media.on_next([])
+                state.playlist.index.on_next(0)
             return
 
         if s == PlayState.PLAYING:
             player.set_state(Gst.State.PLAYING)
         elif s == PlayState.PAUSED or s == PlayState.LOADING:
             player.set_state(Gst.State.PAUSED)
-            if s == PlayState.LOADING and state.current.value:
+            if s == PlayState.LOADING and state.current_item:
                 # Reset time to 0 when loading new track
                 state.stream.current_time.on_next(0)
 
         elif s == PlayState.EMPTY:
             player.set_state(Gst.State.NULL)
-            state.current.on_next(None)
+            state.playlist.media.on_next([])
+            state.playlist.index.on_next(0)
 
     state.state.subscribe(on_state_changed)
 
@@ -275,7 +307,7 @@ def setup_player(state: PlayerState) -> Gst.Element:
 
     def update_time_state() -> bool:
         # Only update time if we're currently playing, to avoid unnecessary queries when paused
-        if not state.current.value:
+        if not state.current_item:
             return True  # Keep timeout alive
         if state.state.value == PlayState.PLAYING:
             # Query position
@@ -299,7 +331,7 @@ def setup_player(state: PlayerState) -> Gst.Element:
 
     def on_bus_message(bus: Gst.Bus, message: Gst.Message) -> None:
         # If current is None, we have no track loaded, so ignore messages
-        if not state.current.value:
+        if not state.current_item:
             return
         if message.type == Gst.MessageType.EOS:
             state.state.on_next(PlayState.PAUSED)
@@ -314,7 +346,7 @@ def setup_player(state: PlayerState) -> Gst.Element:
     bus.connect("message", on_bus_message)
 
     def on_seek_request(position_ns: int) -> None:
-        if not state.current.value:
+        if not state.current_item:
             return
         player.seek_simple(
             Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT, position_ns

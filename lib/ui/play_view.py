@@ -151,17 +151,12 @@ def create_now_playing_view(
     queue_list = Gtk.ListBox()
     queue_list.add_css_class("boxed-list")
     queue_list.add_css_class("transparent")
-    queue_list.set_selection_mode(Gtk.SelectionMode.NONE)
+    queue_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
 
-    # Add dummy items
-    for i in range(1, 10):
-        row = Adw.ActionRow(title=f"Dummy Track {i}", subtitle="Dummy Artist")
-        img = Gtk.Image(icon_name="audio-x-generic-symbolic")
-        img.set_pixel_size(48)
-        row.add_prefix(img)
-        duration = Gtk.Label(label="3:00")
-        row.add_suffix(duration)
-        queue_list.append(row)
+    def _on_row_activated(box: Gtk.ListBox, row: Gtk.ListBoxRow) -> None:
+        state.playlist.index.on_next(row.get_index())
+
+    queue_list.connect("row-activated", _on_row_activated)
 
     queue_scroll.set_child(queue_list)
 
@@ -204,6 +199,49 @@ def create_now_playing_view(
         update_artist(current.artist)
         _on_album_art_change(current.album_art)
 
+    def _update_queue(media_list: list[MediaStatus]) -> None:
+        while child := queue_list.get_first_child():
+            queue_list.remove(child)
+
+        for media in media_list:
+            row = Adw.ActionRow(
+                title=media.title or "Unknown Title",
+                subtitle=media.artist or "Unknown Artist",
+            )
+            if media.album_art:
+                from utils import load_image_async
+
+                img = Gtk.Picture()
+                img.set_can_shrink(True)
+                img.set_content_fit(Gtk.ContentFit.CONTAIN)
+                img.set_size_request(48, 48)
+                img.add_css_class("card")
+                load_image_async(img, media.album_art)
+                row.add_prefix(img)
+            else:
+                img = Gtk.Image(icon_name="audio-x-generic-symbolic")
+                img.set_pixel_size(48)
+                img.add_css_class("card")
+                img.add_css_class("dim-label")
+                row.add_prefix(img)
+
+            queue_list.append(row)
+
+        _highlight_current_index(state.playlist.index.value)
+
+    def _highlight_current_index(idx: int) -> None:
+        row = queue_list.get_row_at_index(idx)
+        if row:
+            queue_list.select_row(row)
+
+    def _idle_update_queue(media_list: list[MediaStatus]) -> None:
+        GLib.idle_add(_update_queue, media_list)
+
+    def _idle_highlight(idx: int) -> None:
+        GLib.idle_add(_highlight_current_index, idx)
+
     state.current.subscribe(on_current)
+    state.playlist.media.subscribe(_idle_update_queue)
+    state.playlist.index.subscribe(_idle_highlight)
 
     return view
