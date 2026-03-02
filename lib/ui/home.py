@@ -1,7 +1,7 @@
 from utils import load_thumbnail
 from typing import cast
 from typing import Any
-from lib.env import CACHE_DIR
+from lib.sys.env import CACHE_DIR
 from reactivex import Subject
 from typing import Tuple
 from lib.data import Album, Artist, BaseMedia
@@ -13,7 +13,6 @@ from lib.types import YTMusicSubject
 import ytmusicapi
 from typing import Optional
 from gi.repository import Gtk, GLib, Adw, Pango, Gio, GdkPixbuf, Gdk
-from utils import load_image_async
 from reactivex.subject import BehaviorSubject
 from pydantic import TypeAdapter
 from pydantic import BaseModel, Field

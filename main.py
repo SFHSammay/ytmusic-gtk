@@ -32,10 +32,7 @@ gi.require_version("Pango", "1.0")
 gi.require_version("Gio", "2.0")
 gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Gdk", "4.0")
-
-from gi.repository import Gtk, Adw, Gst, GLib, Pango, Gio, GdkPixbuf, Gdk
-
-
+from gi.repository import Gtk, Adw, Gst, GLib, Pango, Gio, GdkPixbuf, Gdk, GObject
 from lib.ui.explore import ExplorePage
 from lib.ui.play_bar import PlayBar, PlayerState
 from lib.types import YTMusicSubject
@@ -57,8 +54,10 @@ class YTMusicWindow(Adw.ApplicationWindow):
         self.set_default_size(900, 700)
         self.set_title("YT Music")
 
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.set_content(main_box)
+        # --- FIX 2: Use ToolbarView with FLAT style to remove the divider ---
+        toolbar_view = Adw.ToolbarView()
+        toolbar_view.set_top_bar_style(Adw.ToolbarStyle.FLAT)
+        self.set_content(toolbar_view)
 
         self.stack = Adw.ViewStack()
         self.switcher = Adw.ViewSwitcher()
@@ -67,12 +66,50 @@ class YTMusicWindow(Adw.ApplicationWindow):
 
         header = Adw.HeaderBar()
         header.set_title_widget(self.switcher)
-        main_box.append(header)
 
-        main_box.append(self.stack)
+        # --- FIX 3: pack_start puts the button on the left ---
+        self.search_btn = Gtk.ToggleButton()
+        self.search_btn.set_icon_name("system-search-symbolic")
+        self.search_btn.set_tooltip_text("Search")
+        header.pack_start(self.search_btn)
+
+        # Add header to the ToolbarView
+        toolbar_view.add_top_bar(header)
+
+        # --- FIX 1: Search Bar Width Setup using Adw.Clamp ---
+        self.search_bar = Gtk.SearchBar()
+        self.search_entry = Gtk.SearchEntry()
+        self.search_entry.set_placeholder_text("Search songs, artists, or albums...")
+
+        # Tell the entry to greedily take up available horizontal space
+        self.search_entry.set_hexpand(True)
+
+        # Use Adw.Clamp to make the search bar wide but prevent it from
+        # stretching infinitely on ultrawide monitors
+        clamp = Adw.Clamp()
+        clamp.set_maximum_size(450)
+        clamp.set_child(self.search_entry)
+
+        self.search_bar.set_child(clamp)
+        self.search_bar.connect_entry(self.search_entry)
+        self.search_bar.set_key_capture_widget(self)
+
+        self.search_bar.bind_property(
+            "search-mode-enabled",
+            self.search_btn,
+            "active",
+            GObject.BindingFlags.BIDIRECTIONAL | GObject.BindingFlags.SYNC_CREATE,
+        )
+
+        self.search_entry.connect("activate", self.on_search_activated)
+
+        # Stack the search bar directly under the header bar
+        toolbar_view.add_top_bar(self.search_bar)
+
+        # --- Main Content ---
+        toolbar_view.set_content(self.stack)
         self.stack.set_vexpand(True)
 
-        # create a single shared state model for the player
         self.player_state = PlayerState()
 
         # Build specific UI containers
@@ -83,26 +120,20 @@ class YTMusicWindow(Adw.ApplicationWindow):
             ExplorePage(yt_subject), "explore", "Explore", "compass2-symbolic"
         )
 
-        # append playbar with the shared state instance
-        main_box.append(PlayBar(self.player_state))
+        # --- native bottom bar handling for the playbar ---
+        toolbar_view.add_bottom_bar(PlayBar(self.player_state))
 
         self.fetch_data_async(yt_subject)
 
-    def create_empty_list_page(
-        self, page_id: str, title: str, icon_name: str
-    ) -> Gtk.ListBox:
-        scrolled = Gtk.ScrolledWindow()
-        list_box = Gtk.ListBox()
-        list_box.set_selection_mode(Gtk.SelectionMode.NONE)
-        list_box.add_css_class("boxed-list")
-        list_box.set_margin_top(12)
-        list_box.set_margin_bottom(12)
-        list_box.set_margin_start(12)
-        list_box.set_margin_end(12)
+    def on_search_activated(self, entry: Gtk.SearchEntry):
+        query = entry.get_text()
+        if not query.strip():
+            return
 
-        scrolled.set_child(list_box)
-        self.stack.add_titled_with_icon(scrolled, page_id, title, icon_name)
-        return list_box
+        logging.info(f"User searched for: {query}")
+
+        # Close the search bar after pressing enter (optional, up to your UX preference)
+        # self.search_bar.set_search_mode(False)
 
     def fetch_data_async(self, yt_subject: YTMusicSubject):
         def task():
