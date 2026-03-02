@@ -13,10 +13,8 @@ def create_now_playing_view(
     """
     view = Adw.ToolbarView()
 
-    # --- ADD THIS LINE ---
     # Forces the view to have a solid background (matches light/dark mode automatically)
     view.add_css_class("background")
-    # ---------------------
 
     # Manually recreate the header bar
     header = Adw.HeaderBar()
@@ -52,7 +50,7 @@ def create_now_playing_view(
 
     view.set_content(content)
 
-    # --- Reactive Bindings ---
+    # Reactive Bindings
     def update_title(title: Optional[str]):
         markup = f"<span size='x-large' weight='bold'>{GLib.markup_escape_text(title or "")}</span>"
         GLib.idle_add(title_label.set_markup, markup)
@@ -60,15 +58,9 @@ def create_now_playing_view(
     def update_artist(artist: Optional[str]):
         GLib.idle_add(artist_label.set_text, artist or "")
 
-    # state.current_song.title.subscribe(update_title)
-    # state.current_song.artist.subscribe(update_artist)
     def on_current(current: Optional[CurrentMusic]) -> None:
         if not current:
             return
-        # update_title(current.title)
-        # update_artist(current.artist)
-        # current.title.subscribe(update_title)
-        # current.artist.subscribe(update_artist)
         update_title(current.title)
         update_artist(current.artist)
 

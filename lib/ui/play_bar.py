@@ -10,16 +10,14 @@ from reactivex import combine_latest
 from lib.state.player_state import PlayerState
 
 
-def ProgressBar(
+def PlayerProgressBar(
     state: PlayerState,
 ) -> Gtk.Widget:
     progress_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, 0.01)
     progress_scale.set_draw_value(False)
     progress_scale.set_hexpand(True)
-    # Make it flush against the top edge
     progress_scale.set_margin_top(0)
     progress_scale.set_margin_bottom(0)
-    # Add a bit of padding on the sides
     progress_scale.set_margin_start(8)
     progress_scale.set_margin_end(8)
 
@@ -35,7 +33,6 @@ def ProgressBar(
         progress_scale.set_value(current_ns / 1e9)
         is_updating_scale = False
 
-    # state.current.subscribe(on_current)
     combine_latest(state.stream.current_time, state.stream.total_time).subscribe(
         update_progress_ui
     )
@@ -365,7 +362,7 @@ def PlayBar(
     play_bar.add_css_class("background")
 
     # Add components
-    play_bar.append(ProgressBar(state))
+    play_bar.append(PlayerProgressBar(state))
 
     action_area = Gtk.CenterBox()
     action_area.set_margin_start(8)
