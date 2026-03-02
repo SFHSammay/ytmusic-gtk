@@ -7,6 +7,8 @@ import logging
 from gi.repository import Gtk, GdkPixbuf, GLib, Gio, Gdk
 import urllib.request
 
+IMG_CACHE = {}
+
 
 def load_image_async(image_widget: Gtk.Widget, url: str):
     """Fetches an image from a URL in the background and updates the widget.
@@ -20,7 +22,10 @@ def load_image_async(image_widget: Gtk.Widget, url: str):
             img_cache_dir = CACHE_DIR / "images"
             img_cache_dir.mkdir(parents=True, exist_ok=True)
             img_filename = img_cache_dir / f"{hash(url)}.img"
-            if img_filename.exists():
+            if url in IMG_CACHE:
+                logging.debug(f"Loading image from in-memory cache: {url}")
+                data = IMG_CACHE[url]
+            elif img_filename.exists():
                 logging.debug(f"Loading image from cache: {img_filename}")
                 with open(img_filename, "rb") as f:
                     data = f.read()
@@ -33,6 +38,8 @@ def load_image_async(image_widget: Gtk.Widget, url: str):
                 # with open(img_filename, "wb") as f:
                 # f.write(data)
                 # URL change all the time...
+                # Add to in-memory cache to avoid re-downloading during the same session
+                IMG_CACHE[url] = data
 
             # Convert network bytes to a GTK Texture or Pixbuf
             stream = Gio.MemoryInputStream.new_from_bytes(GLib.Bytes.new(data))
