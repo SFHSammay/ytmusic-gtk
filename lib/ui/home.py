@@ -54,39 +54,43 @@ def HomeItemCard(
 ) -> Gtk.Box:
     """
     Creates a card widget for a single item in the Home page.
-    This is used for both songs and playlists, with some conditional logic based on available data.
     """
-    # Increased spacing from 8 to 12 for better visual breathing room
+    # Deterministic size: 160x160 keeps it looking like standard album art/thumbnails
+    IMAGE_SIZE = 160
+
+    logging.debug(
+        f"Creating card for item: {item.title} (Video ID: {item.video_id}) - Type: {item.video_type}"
+    )
+
+    # Calculate the aspect ratio of the thumbnail if available, otherwise default to 1:1
+    aspect_ratio = 1.0
+    if item.thumbnails and len(item.thumbnails) > 0:
+        thumb = item.thumbnails[-1]  # Use the highest resolution thumbnail
+        if thumb.width and thumb.height:
+            aspect_ratio = thumb.width / thumb.height
+
     card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-    card.set_size_request(160, -1)
+    card.set_size_request(IMAGE_SIZE, -1)
     card.set_halign(Gtk.Align.START)
     card.set_valign(Gtk.Align.START)
-    # Adding native Adwaita rounding classes (requires standard Adwaita stylesheet)
-    card.add_css_class("card")
 
+    # Use Gtk.Picture but enforce a strict size and scaling
     img = Gtk.Picture()
-    img.set_can_shrink(True)
+    img.set_can_shrink(
+        True
+    )  # Crucial: Stops high-res network images from blowing up the UI
     img.set_content_fit(Gtk.ContentFit.COVER)
+    img.set_size_request(
+        int(IMAGE_SIZE * aspect_ratio), IMAGE_SIZE
+    )  # Maintain aspect ratio
+    img.add_css_class("card")  # Adds nice Adwaita rounding to the image
 
-    # if item.thumbnails:
-    #     thumb_url = (
-    #         item.thumbnails[-1].url
-    #         if isinstance(item.thumbnails, list)
-    #         else item.thumbnails
-    #     )
-    #     load_image_async(img, thumb_url)
     load_thumbnail(img, item.thumbnails)
 
-    aspect = Gtk.AspectFrame()
-    aspect.set_ratio(1.0)
-    aspect.set_obey_child(False)
-    aspect.set_child(img)
-    aspect.set_size_request(160, 160)
-    # Subtle polish: remove the border from the aspect frame so it doesn't look boxy
-    aspect.add_css_class("view")
-
-    # Cleaned up typography
     text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+    text_box.set_margin_start(4)  # Indents text slightly from the left edge
+    text_box.set_margin_end(4)  # Prevents text from hitting the hard right edge
+    text_box.set_margin_bottom(24)  # Gives the bottom of the card some breathing room
 
     title_lbl = Gtk.Label(label=item.title)
     title_lbl.set_halign(Gtk.Align.START)
@@ -94,21 +98,22 @@ def HomeItemCard(
     title_lbl.set_lines(2)
     title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
     title_lbl.set_max_width_chars(1)
-    # Make the title pop just a little bit more
+    title_lbl.set_size_request(IMAGE_SIZE, -1)
     title_lbl.add_css_class("heading")
 
     creator = item.artists[0].name if item.artists else "Unknown"
     subtitle_lbl = Gtk.Label(label=creator)
     subtitle_lbl.set_halign(Gtk.Align.START)
     subtitle_lbl.add_css_class("dim-label")
-    subtitle_lbl.add_css_class("caption")  # Slightly smaller text for metadata
+    subtitle_lbl.add_css_class("caption")
     subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
     subtitle_lbl.set_max_width_chars(1)
+    subtitle_lbl.set_size_request(IMAGE_SIZE, -1)
 
     text_box.append(title_lbl)
     text_box.append(subtitle_lbl)
 
-    card.append(aspect)
+    card.append(img)
     card.append(text_box)
 
     click = Gtk.GestureClick.new()
@@ -124,7 +129,6 @@ def HomeItemCard(
             creator = item.artists[0].name
         elif item.author:
             creator = item.author[0].name
-        # player_state.subtitle.on_next(creator)
         player_state.artist.on_next(creator)
         player_state.album_name.on_next(item.album.name if item.album else "")
 
@@ -210,20 +214,17 @@ def HomeItemCard(
                     for f in download_dir.glob("*")
                     if f.is_file() and f.name != "downloaded.txt"
                 ]
-                # downloaded_files = list(download_dir.glob("*"))
                 if not downloaded_files:
                     logging.warning(f"No files downloaded to {download_dir}")
 
                 latest_file = max(downloaded_files, key=lambda f: f.stat().st_mtime)
                 logging.info(f"Latest downloaded file: {latest_file}")
-                # This file is usually in a .webm or .m4a format.
                 # set the file
                 player_state.audio_file.on_next(latest_file)
                 # set play to true
                 player_state.playing.on_next(True)
 
             except Exception as e:
-                # This catches the 'contents' error you saw without crashing the app
                 logging.error(f"Note: Could not fetch additional metadata: {e}")
 
         # Run the fetch in a thread so the UI doesn't stutter
@@ -231,8 +232,6 @@ def HomeItemCard(
 
     click.connect("pressed", on_card_click)
     card.add_controller(click)
-
-    # Optional: Change cursor to pointer on hover to indicate clickability
     card.set_cursor(Gdk.Cursor.new_from_name("pointer"))
 
     return card
@@ -243,12 +242,13 @@ def HomeItemCard(
 
 def HomeRow(
     section: HomeSectionData, player_state: PlayerState, yt: ytmusicapi.YTMusic
-) -> tuple[Gtk.Box, Adw.Carousel]:
+) -> tuple[Gtk.Box, Gtk.Box]:
     """
-    Creates a horizontal carousel row for a given Home section, including the header and the carousel itself.
-    Returns both the container box and the carousel so that we can append new items later if needed.
+    Creates a standard scrollable horizontal row for a given Home section.
+    Returns both the parent container and the inner scrolling box.
     """
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+
     header = Gtk.Label(label=section.title)
     header.set_halign(Gtk.Align.START)
     header.set_margin_start(12)
@@ -256,21 +256,27 @@ def HomeRow(
     header.add_css_class("title-2")
     box.append(header)
 
-    carousel = Adw.Carousel()
-    carousel.set_spacing(16)
-    carousel.set_allow_scroll_wheel(False)
+    # 1. Create a native ScrolledWindow to replace the Carousel
+    scrolled = Gtk.ScrolledWindow()
+    # Horizontal scroll automatically, no vertical scrolling
+    scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+
+    # 2. Create the horizontal container for the items
+    row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+    # NEW: Add padding around the entire row of items
+    row_box.set_margin_start(12)  # Space before the first item
+    row_box.set_margin_end(12)  # Space after the last item
+    row_box.set_margin_top(12)  # Slight gap below the section header
+    row_box.set_margin_bottom(16)  # Prevents horizontal scrollbar from overlapping text
 
     for item in section.contents:
-        carousel.append(HomeItemCard(item, player_state, yt))
+        row_box.append(HomeItemCard(item, player_state, yt))
 
-    dots = Adw.CarouselIndicatorDots()
-    dots.set_carousel(carousel)
+    scrolled.set_child(row_box)
+    box.append(scrolled)
 
-    box.append(carousel)
-    box.append(dots)
-
-    # Return both so the parent can inject new items later
-    return box, carousel
+    # Return both so the parent can inject new items later, exactly as before
+    return box, row_box
 
 
 def HomePage(
@@ -393,6 +399,11 @@ def HomePage(
     def fetch_home_data(yt: ytmusicapi.YTMusic, limit: int, is_reset: bool):
         try:
             raw_home = yt.get_home(limit=limit)
+            # Write the raw response to a JSON file for debugging
+            import json
+
+            with open("debug_home_response.json", "w") as f:
+                json.dump(raw_home, f, indent=4)
             home_data = HomePageTypeAdapter.validate_python(raw_home)
             home_page_subject.on_next((home_data, is_reset, yt))
         except Exception as e:

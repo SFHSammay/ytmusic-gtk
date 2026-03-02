@@ -1,3 +1,4 @@
+from lib.sys.env import CACHE_DIR
 from typing import List
 from typing import Optional
 from lib.data import Thumbnail
@@ -16,9 +17,22 @@ def load_image_async(image_widget: Gtk.Widget, url: str):
 
     def fetch():
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            response = urllib.request.urlopen(req)
-            data = response.read()
+            img_cache_dir = CACHE_DIR / "images"
+            img_cache_dir.mkdir(parents=True, exist_ok=True)
+            img_filename = img_cache_dir / f"{hash(url)}.img"
+            if img_filename.exists():
+                logging.debug(f"Loading image from cache: {img_filename}")
+                with open(img_filename, "rb") as f:
+                    data = f.read()
+            else:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                response = urllib.request.urlopen(req)
+                data = response.read()
+
+                # Save to cache
+                # with open(img_filename, "wb") as f:
+                # f.write(data)
+                # URL change all the time...
 
             # Convert network bytes to a GTK Texture or Pixbuf
             stream = Gio.MemoryInputStream.new_from_bytes(GLib.Bytes.new(data))

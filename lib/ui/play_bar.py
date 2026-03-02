@@ -22,9 +22,6 @@ class PlayerState:
             "Nothing is playing. Click a song to get started!"
         )
     )
-    # subtitle: BehaviorSubject[str] = field(
-    #     default_factory=lambda: BehaviorSubject("MIMI • Science • 2024")
-    # )
     artist: BehaviorSubject[str] = field(default_factory=lambda: BehaviorSubject(""))
     album_name: BehaviorSubject[str] = field(
         default_factory=lambda: BehaviorSubject("")
