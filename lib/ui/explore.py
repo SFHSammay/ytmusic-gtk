@@ -61,21 +61,22 @@ class ExploreData(BaseModel):
     new_videos: List[NewVideo]
 
 
-def build_trending_list(trending_data: Trending) -> Gtk.Box:
-    """Builds a Top-Charts style vertical list for Trending items."""
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+def build_trending_list(trending_data: Trending) -> Adw.PreferencesGroup:
+    """Builds a partial visible list with an inline 'Show more' button for remaining Trending items."""
+    group = Adw.PreferencesGroup()
+    group.set_title("Trending")
 
-    header = Gtk.Label(label="Trending")
-    header.set_halign(Gtk.Align.START)
-    header.set_margin_start(12)
-    header.add_css_class("title-2")
-    box.append(header)
+    if not trending_data.items:
+        return group
 
-    list_box = Gtk.ListBox()
-    list_box.add_css_class("boxed-list")  # Native Adwaita rounded list
-    list_box.set_selection_mode(Gtk.SelectionMode.NONE)
-    list_box.set_margin_start(12)
-    list_box.set_margin_end(12)
+    # Create a visible list box for items
+    visible_list = Gtk.ListBox()
+    visible_list.add_css_class("boxed-list")
+    visible_list.set_selection_mode(Gtk.SelectionMode.NONE)
+    visible_list.set_margin_bottom(12)
+    group.add(visible_list)
+
+    all_rows = []
 
     for i, item in enumerate(trending_data.items):
         creator = item.artists[0].name if item.artists else "Unknown"
@@ -109,83 +110,32 @@ def build_trending_list(trending_data: Trending) -> Gtk.Box:
         img_box.append(img)
         row.add_prefix(img_box)
 
-        list_box.append(row)
+        all_rows.append(row)
 
-    box.append(list_box)
-    return box
+    # Add the first 3 items
+    for row in all_rows[:3]:
+        visible_list.append(row)
 
-
-def build_top_episodes_list(episodes: List[TopEpisode]) -> Gtk.Box:
-    """Builds a vertical list of wide cards for podcasts, showing descriptions."""
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-
-    header = Gtk.Label(label="Top Episodes")
-    header.set_halign(Gtk.Align.START)
-    header.set_margin_start(12)
-    header.add_css_class("title-2")
-    box.append(header)
-
-    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-    vbox.set_margin_start(12)
-    vbox.set_margin_end(12)
-
-    for ep in episodes:
-        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        card.add_css_class("card")  # Make the whole row a distinct card
-        card.set_margin_top(4)
-        card.set_margin_bottom(4)
-
-        # Thumbnail (Square)
-        img = Gtk.Picture()
-        img.set_size_request(120, 120)
-        img.set_content_fit(Gtk.ContentFit.COVER)
-        if ep.thumbnails:
-            load_thumbnail(img, ep.thumbnails)
-        card.append(img)
-
-        # Text Details
-        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        text_box.set_margin_top(12)
-        text_box.set_margin_bottom(12)
-        text_box.set_margin_end(12)
-        text_box.set_hexpand(True)
-
-        title = Gtk.Label(label=ep.title)
-        title.set_halign(Gtk.Align.START)
-        title.set_ellipsize(Pango.EllipsizeMode.END)
-        title.add_css_class("heading")
-
-        desc = Gtk.Label(label=ep.description)
-        desc.set_halign(Gtk.Align.START)
-        desc.set_wrap(True)
-        desc.set_lines(2)
-        desc.set_ellipsize(Pango.EllipsizeMode.END)
-        desc.add_css_class("dim-label")
-
-        meta_text = (
-            f"{ep.podcast.name} • {ep.date} • {ep.duration}"
-            if getattr(ep, "podcast", None)
-            else f"{ep.date} • {ep.duration}"
+    # Only add the "Show more" button if there are more than 3 items
+    if len(all_rows) > 3:
+        show_more_row = Adw.ActionRow(
+            title="Show more", subtitle="See all trending hits"
         )
-        meta = Gtk.Label(label=meta_text)
-        meta.set_halign(Gtk.Align.START)
-        meta.add_css_class("caption")
-        meta.add_css_class("accent")  # Give the metadata a pop of color
+        show_more_row.set_activatable(True)
 
-        text_box.append(title)
-        text_box.append(desc)
+        icon = Gtk.Image.new_from_icon_name("go-down-symbolic")
+        icon.set_valign(Gtk.Align.CENTER)
+        show_more_row.add_suffix(icon)
 
-        # Push meta to the bottom
-        spacer = Gtk.Box()
-        spacer.set_vexpand(True)
-        text_box.append(spacer)
-        text_box.append(meta)
+        def on_show_more_clicked(_):
+            show_more_row.set_visible(False)
+            for r in all_rows[3:]:
+                visible_list.append(r)
 
-        card.append(text_box)
-        vbox.append(card)
+        show_more_row.connect("activated", on_show_more_clicked)
+        visible_list.append(show_more_row)
 
-    box.append(vbox)
-    return box
+    return group
 
 
 def build_video_carousel(title: str, videos: List[NewVideo]) -> Gtk.Box:
@@ -426,36 +376,33 @@ def ExploreRow(title: str, items: List[Any], is_trending: bool = False) -> Gtk.B
 
 def MoodsAndGenresBadges(moods: List[MoodAndGenre]) -> Gtk.Box:
     """
-    Creates a FlowBox filled with pill-shaped buttons for Moods and Genres.
+    Creates a horizontally scrollable carousel of Moods and Genres.
     """
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
 
     header = Gtk.Label(label="Moods & Genres")
     header.set_halign(Gtk.Align.START)
     header.set_margin_start(12)
-    header.set_margin_bottom(4)
     header.add_css_class("title-2")
     box.append(header)
 
-    # FlowBox naturally wraps items to the next line when space runs out
-    flowbox = Gtk.FlowBox()
-    flowbox.set_selection_mode(Gtk.SelectionMode.NONE)
-    flowbox.set_max_children_per_line(15)  # Adjust based on how wide you want rows
-    flowbox.set_margin_start(12)
-    flowbox.set_margin_end(12)
-    flowbox.set_row_spacing(10)
-    flowbox.set_column_spacing(10)
+    scrolled = Gtk.ScrolledWindow()
+    scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+
+    # Use a FlowBox with a horizontal orientation to allow columns
+    # but since we want a true single-line carousel we use a Box
+    row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+    row_box.set_margin_start(12)
+    row_box.set_margin_end(12)
+    row_box.set_margin_bottom(16)
 
     for mood in moods:
         btn = Gtk.Button(label=mood.title)
-        btn.add_css_class("pill")  # Adwaita's rounded pill style
+        btn.add_css_class("pill")
+        row_box.append(btn)
 
-        # Optional: Add an action here when a mood badge is clicked
-        # btn.connect("clicked", lambda b, m=mood: on_mood_clicked(m))
-
-        flowbox.append(btn)
-
-    box.append(flowbox)
+    scrolled.set_child(row_box)
+    box.append(scrolled)
     return box
 
 
@@ -522,11 +469,7 @@ def ExplorePage(
         if data.trending and data.trending.items:
             explore_box.append(build_trending_list(data.trending))
 
-        # 4. Top Episodes (Wide Horizontal Cards)
-        if data.top_episodes:
-            explore_box.append(build_top_episodes_list(data.top_episodes))
-
-        # 5. New Videos (16:9 Aspect Ratio)
+        # 4. New Videos (16:9 Aspect Ratio)
         if data.new_videos:
             explore_box.append(build_video_carousel("New Videos", data.new_videos))
 
