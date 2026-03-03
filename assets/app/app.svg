@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <defs>
+    <linearGradient id="gnome_red" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f66151" />
+      <stop offset="100%" stop-color="#c01c28" />
+    </linearGradient>
+    
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.3" />
+    </filter>
+  </defs>
+  
+  <circle cx="32" cy="32" r="28" fill="url(#gnome_red)" filter="url(#shadow)" />
+  
+  <circle cx="32" cy="32" r="27.5" fill="none" stroke="#ffffff" stroke-width="1" stroke-opacity="0.25" />
+
+  <circle cx="32" cy="32" r="16" fill="none" stroke="#ffffff" stroke-width="2.5" />
+
+  <path d="M 27 23 L 27 41 L 42 32 Z" fill="#ffffff" stroke="#ffffff" stroke-width="2" stroke-linejoin="round" />
+</svg>

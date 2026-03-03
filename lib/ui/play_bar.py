@@ -70,7 +70,8 @@ def PlayControls(state: PlayerState) -> Gtk.Widget:
     play_icon = Gtk.Image()
     play_icon.set_pixel_size(24)
 
-    play_spinner = Adw.Spinner() if hasattr(Adw, "Spinner") else Gtk.Spinner()
+    play_spinner = Adw.Spinner()
+    play_spinner.set_size_request(24, 24)
 
     play_stack = Gtk.Stack()
     play_stack.add_named(play_icon, "icon")
@@ -79,6 +80,7 @@ def PlayControls(state: PlayerState) -> Gtk.Widget:
     play_pause_btn = Gtk.Button()
     play_pause_btn.set_child(play_stack)
     play_pause_btn.add_css_class("circular")
+    play_pause_btn.add_css_class("flat")
     play_pause_btn.set_size_request(48, 48)
 
     next_btn = Gtk.Button(icon_name="media-skip-forward-symbolic")
