@@ -101,3 +101,56 @@ class Microformat(BaseModel):
 class SongDetail(BaseModel):
     video_details: VideoDetails = Field(alias="videoDetails")
     microformat: Microformat
+
+
+def test():
+    import logging
+
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
+    # Add lib to sys.path
+    import sys
+    import os
+    import pathlib
+
+    sys.path.append(str(pathlib.Path(__file__).parent.parent))
+
+    from lib.net.client import auto_login
+
+    yt = auto_login()
+    if not yt:
+        logger.error("Failed to login")
+        return
+
+    logger.info("Testing parsing of History...")
+    try:
+        history_data = yt.get_history()
+        songs = Songs.validate_python(history_data)
+        logger.info(f"Successfully parsed {len(songs)} songs from history.")
+
+        if songs and songs[0].video_id:
+            video_id = songs[0].video_id
+
+            logger.info(f"Testing parsing of SongDetail for video_id {video_id}...")
+            song_data = yt.get_song(video_id)
+            song_detail = SongDetail.model_validate(song_data)
+            logger.info(
+                f"Successfully parsed song detail: {song_detail.video_details.title}"
+            )
+
+            logger.info(f"Testing parsing of WatchPlaylist for video_id {video_id}...")
+            playlist_data = yt.get_watch_playlist(videoId=video_id)
+            watch_playlist = WatchPlaylist.model_validate(playlist_data)
+            logger.info(
+                f"Successfully parsed watch playlist with {len(watch_playlist.tracks)} tracks."
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to parse: {e}")
+        raise
+
+
+if __name__ == "__main__":
+    test()
