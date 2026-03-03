@@ -48,13 +48,13 @@ class YTMusicApp(Adw.Application):
     def on_about_action(self, action: Gio.SimpleAction, param: Gio.ActionGroup):
         """Displays the Adwaita About Window."""
         about = Adw.AboutWindow(
-            application_name="YT Music",
+            application_name="YT Music GTK",
             application_icon="com.example.YTMusicApp",  # Ensure you have an icon matching this ID
-            developer_name="Your Name",
+            developer_name="Yamada Sexta",
             version="1.0.0",
-            copyright="© 2026 Your Name",
-            website="https://github.com/yourusername/ytmusic",
-            issue_url="https://github.com/yourusername/ytmusic/issues",
+            copyright="© 2026 Yamada Sexta\nThis application comes with absolutely no warranty. See the GNU General Public License, version 2 or later for details.",
+            website="https://github.com/yamada-sexta/ytmusic-gtk",
+            issue_url="https://github.com/yamada-sexta/ytmusic-gtk/issues",
         )
         # Attach the about window to the main app window so it behaves as a modal
         about.set_transient_for(self.get_active_window())

@@ -1,34 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
   <defs>
-    <linearGradient id="light_primary" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffbbbb" stop-opacity="0.9" />
-      <stop offset="35%" stop-color="#ffbbbb" stop-opacity="0.0" />
+    <linearGradient id="mainSurfaceGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#cd2732ff" /> 
+      <stop offset="100%" stop-color="#b81b25ff" /> 
     </linearGradient>
 
-    <linearGradient id="light_rim" x1="100%" y1="100%" x2="0%" y2="0%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8" />
-      <stop offset="30%" stop-color="#ffffff" stop-opacity="0.0" />
+    <linearGradient id="edgeSideShadows" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.3" />
+      <stop offset="25%" stop-color="#000000" stop-opacity="0.0" />
+      <stop offset="75%" stop-color="#000000" stop-opacity="0.0" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.3" />
     </linearGradient>
-    
-    <linearGradient id="edge_shadow" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="70%" stop-color="#000000" stop-opacity="0.0" />
-      <stop offset="100%" stop-color="#000000" stop-opacity="0.6" />
+      
+    <linearGradient id="edgeTopBottomLight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.3" />
+      <stop offset="20%" stop-color="#ffffff" stop-opacity="0.0" />
+      <stop offset="70%" stop-color="#ffffff" stop-opacity="0.0" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.2" />
     </linearGradient>
 
-    <linearGradient id="ring_light" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="1.0" />
-      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.75" />
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="1.0" />
+    <linearGradient id="innerWhiteGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e6e6e6" />
     </linearGradient>
+
+    <filter id="innerElementShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="0" stdDeviation="0.6" flood-color="#000000" flood-opacity="0.2" />
+    </filter>
   </defs>
   
-  <circle cx="32" cy="32" r="28" fill="#e01b24" />
+  <circle cx="32" cy="32" r="28" fill="url(#mainSurfaceGrad)" />
   
-  <circle cx="32" cy="32" r="27.25" fill="none" stroke="url(#edge_shadow)" stroke-width="1.5" />
-  <circle cx="32" cy="32" r="27.25" fill="none" stroke="url(#light_rim)" stroke-width="1.5" />
-  <circle cx="32" cy="32" r="27.25" fill="none" stroke="url(#light_primary)" stroke-width="1.5" />
+  <circle cx="32" cy="32" r="27" fill="none" stroke="url(#edgeSideShadows)" stroke-width="2" transform="rotate(30 32 32)" />
+  
+  <circle cx="32" cy="32" r="27" fill="none" stroke="url(#edgeTopBottomLight)" stroke-width="2" />
 
-  <circle cx="32" cy="32" r="15" fill="none" stroke="url(#ring_light)" stroke-width="2.5" />
-
-  <path d="M 28 23 L 28 41 L 40 32 Z" fill="#ffffff" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round" />
+  <g filter="url(#innerElementShadow)">
+     <circle cx="32" cy="32" r="15" fill="none" stroke="url(#innerWhiteGrad)" stroke-width="2.5" />
+     <path d="M 28 23 L 28 41 L 40 32 Z" fill="url(#innerWhiteGrad)" stroke="url(#innerWhiteGrad)" stroke-width="1.5" stroke-linejoin="round" />
+  </g>
 </svg>
