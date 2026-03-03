@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <defs>
+    <linearGradient id="light_primary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffbbbb" stop-opacity="0.9" />
+      <stop offset="35%" stop-color="#ffbbbb" stop-opacity="0.0" />
+    </linearGradient>
+
+    <linearGradient id="light_rim" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8" />
+      <stop offset="30%" stop-color="#ffffff" stop-opacity="0.0" />
+    </linearGradient>
+    
+    <linearGradient id="edge_shadow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="70%" stop-color="#000000" stop-opacity="0.0" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.6" />
+    </linearGradient>
+
+    <linearGradient id="ring_light" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1.0" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.75" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="1.0" />
+    </linearGradient>
+  </defs>
+  
+  <circle cx="32" cy="32" r="28" fill="#e01b24" />
+  
+  <circle cx="32" cy="32" r="27.25" fill="none" stroke="url(#edge_shadow)" stroke-width="1.5" />
+  <circle cx="32" cy="32" r="27.25" fill="none" stroke="url(#light_rim)" stroke-width="1.5" />
+  <circle cx="32" cy="32" r="27.25" fill="none" stroke="url(#light_primary)" stroke-width="1.5" />
+
+  <circle cx="32" cy="32" r="15" fill="none" stroke="url(#ring_light)" stroke-width="2.5" />
+
+  <path d="M 28 23 L 28 41 L 40 32 Z" fill="#ffffff" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round" />
+</svg>

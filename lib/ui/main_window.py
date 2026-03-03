@@ -31,6 +31,7 @@ class YTMusicWindow(Adw.ApplicationWindow):
         logging.info("Initializing YT Music App UI...")
         self.set_default_size(900, 700)
         self.set_title("YT Music")
+        self.set_icon_name("com.example.YTMusicApp")
 
         self.player_state = PlayerState(yt=yt_subject)
         self._player = setup_player(self.player_state)
