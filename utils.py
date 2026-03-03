@@ -65,11 +65,18 @@ def load_image_async(image_widget: Gtk.Widget, url: str):
                         return
 
                     parent = image_widget.get_parent()
-                    if hasattr(Gtk, "AspectFrame") and isinstance(
-                        parent, Gtk.AspectFrame
-                    ):
-                        parent.set_obey_child(False)
-                        parent.set_ratio(ratio)
+                    if parent is not None:
+                        grandparent = parent.get_parent()
+                        if hasattr(Gtk, "AspectFrame") and isinstance(
+                            grandparent, Gtk.AspectFrame
+                        ):
+                            grandparent.set_obey_child(False)
+                            grandparent.set_ratio(ratio)
+                        elif hasattr(Gtk, "AspectFrame") and isinstance(
+                            parent, Gtk.AspectFrame
+                        ):
+                            parent.set_obey_child(False)
+                            parent.set_ratio(ratio)
 
                 GLib.idle_add(update_ui)
         except Exception as e:
