@@ -228,7 +228,7 @@ def start_play(
                     id=id,
                     # url=track.url,
                     title=track.title,
-                    # artist=detail.video_details.author,
+                    artist=track.artists[0].name if track.artists else None,
                     album_name=track.album.name if track.album else None,
                     year=track.year,
                     album_art=track.thumbnails[-1].url if track.thumbnails else None,
