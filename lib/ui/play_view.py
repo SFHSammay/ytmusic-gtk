@@ -20,6 +20,8 @@ def create_now_playing_view(
     # Manually recreate the header bar
     header = Adw.HeaderBar()
     header.set_show_title(False)
+    header.set_show_start_title_buttons(False)
+    header.set_show_end_title_buttons(False)
 
     # Create a close button with a flat style to look like a native nav button
     close_btn = Gtk.Button(icon_name="go-down-symbolic")
