@@ -24,7 +24,7 @@ def _apply_thumbnail_css() -> None:
     _THUMBNAIL_CSS = Gtk.CssProvider()
     _THUMBNAIL_CSS.load_from_string(
         ".thumbnail-stack { min-width: 0px; min-height: 0px; }"
-        " .thumbnail-card { min-width: 0px; min-height: 0px; overflow: hidden; }"
+        " .thumbnail-card { min-width: 0px; min-height: 0px; }"
     )
     display = Gdk.Display.get_default()
     if display:
@@ -115,6 +115,9 @@ def ThumbnailWidget(
     card_box.set_hexpand(True)
     card_box.set_vexpand(True)
     card_box.set_size_request(0, 0)
+    # Clip children to the card's rounded corners at the GTK render level.
+    # CSS overflow:hidden does not clip child widgets in GTK4 — this API does.
+    card_box.set_overflow(Gtk.Overflow.HIDDEN)
     frame.set_child(card_box)
 
     stack = Gtk.Stack()
