@@ -1,6 +1,6 @@
 # YT Music GTK
 
-Yet another YouTube Music client
+Yet another Desktop YouTube Music client
 
 Built with GTK4 and LibAdwaita.
 
@@ -22,6 +22,7 @@ Built with GTK4 and LibAdwaita.
 - Playback (partial)
 - Home Page (partial)
 - Like/dislike
+
 
 
 
