@@ -13,6 +13,7 @@ def create_now_playing_view(
     Functional component for the Detail 'Now Playing' view.
     """
     view = Adw.ToolbarView()
+    view.add_css_class("background")
 
     # Forces the view to have a solid background (matches light/dark mode automatically)
 
