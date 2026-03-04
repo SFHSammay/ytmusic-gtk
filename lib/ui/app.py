@@ -37,7 +37,9 @@ class YTMusicApp(Adw.Application):
 
         # Set macOS dock icon
         if sys.platform == "darwin":
-            self._set_macos_dock_icon()
+            from lib.sys.mac_icon import set_macos_dock_icon
+
+            set_macos_dock_icon()
 
         # About Action
         about_action = Gio.SimpleAction.new("about", None)
@@ -87,21 +89,3 @@ class YTMusicApp(Adw.Application):
         """Placeholder for a preferences window."""
         logging.info("Preferences menu item clicked.")
         # E.g., Adw.PreferencesWindow().present()
-
-    def _set_macos_dock_icon(self) -> None:
-        """Sets the macOS dock icon using NSApplication API."""
-        try:
-            from AppKit import NSApplication, NSImage  # type: ignore
-
-            base_dir = Path(__file__).parent.parent.parent.resolve()
-            icon_file = str(
-                base_dir / "assets" / "icons" / "com.example.YTMusicApp.svg"
-            )
-            ns_image = NSImage.alloc().initWithContentsOfFile_(icon_file)
-            if ns_image:
-                NSApplication.sharedApplication().setApplicationIconImage_(ns_image)
-                logging.info("macOS dock icon set.")
-        except ImportError:
-            logging.warning("AppKit not available, dock icon not set.")
-        except Exception as e:
-            logging.warning(f"Could not set macOS dock icon: {e}")
