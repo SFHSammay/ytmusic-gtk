@@ -2,7 +2,7 @@ from lib.data import AlbumData, AlbumTrack
 from lib.ui.thumbnail import ThumbnailWidget
 from lib.ui.play_bar import PlayerState
 from lib.state.player_state import start_play
-from typing import Optional
+from typing import Optional, Literal
 import reactivex as rx
 import ytmusicapi
 import threading
@@ -10,8 +10,9 @@ import logging
 from gi.repository import Gtk, Adw, GLib, Pango, Gdk
 
 
-def AlbumDetailPage(
-    browse_id: str,
+def CollectionDetailPage(
+    item_id: str,
+    item_type: Literal["album", "playlist"],
     player_state: PlayerState,
     yt: ytmusicapi.YTMusic,
 ) -> Adw.NavigationPage:
@@ -41,7 +42,7 @@ def AlbumDetailPage(
     loading_box.set_vexpand(True)
 
     loading_page = Adw.StatusPage()
-    loading_page.set_title("Loading album...")
+    loading_page.set_title(f"Loading {item_type}...")
     loading_page.set_description("Fetching track list")
 
     spinner = Adw.Spinner()
@@ -107,7 +108,9 @@ def AlbumDetailPage(
         left_pane.append(title_lbl)
 
         # Type and Year
-        meta_parts = [album.type]
+        meta_parts: list[str] = []
+        if album.type:
+            meta_parts.append(album.type)
         if album.year:
             meta_parts.append(album.year)
         meta_lbl = Gtk.Label(label=" • ".join(meta_parts))
@@ -116,7 +119,7 @@ def AlbumDetailPage(
         left_pane.append(meta_lbl)
 
         # Track count and duration
-        info_parts = []
+        info_parts: list[str] = []
         if album.track_count:
             info_parts.append(f"{album.track_count} songs")
         if album.duration:
@@ -244,18 +247,21 @@ def AlbumDetailPage(
 
         return GLib.SOURCE_REMOVE
 
-    def fetch_album() -> None:
+    def fetch_data() -> None:
         try:
-            raw_album = yt.get_album(browse_id)
-            album = AlbumData.model_validate(raw_album)
+            if item_type == "playlist":
+                raw_data = yt.get_playlist(item_id)
+            else:
+                raw_data = yt.get_album(item_id)
+            album = AlbumData.model_validate(raw_data)
             GLib.idle_add(build_detail_ui, album)
         except Exception as e:
-            logging.error(f"Failed to fetch album {browse_id}: {e}")
+            logging.error(f"Failed to fetch {item_type} {item_id}: {e}")
 
             def show_error() -> bool:
                 error_page = Adw.StatusPage()
                 error_page.set_icon_name("dialog-error-symbolic")
-                error_page.set_title("Failed to load album")
+                error_page.set_title(f"Failed to load {item_type}")
                 error_page.set_description(str(e))
                 content_stack.add_named(error_page, "error")
                 content_stack.set_visible_child_name("error")
@@ -263,6 +269,6 @@ def AlbumDetailPage(
 
             GLib.idle_add(show_error)
 
-    threading.Thread(target=fetch_album, daemon=True).start()
+    threading.Thread(target=fetch_data, daemon=True).start()
 
     return page

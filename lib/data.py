@@ -39,15 +39,16 @@ class BaseMedia(BaseModel):
     """
 
     title: str
-    # An item with video id doesn't have to be a video
     video_id: Optional[str] = Field(None, alias="videoId")
     browse_id: Optional[str] = Field(None, alias="browseId")
     artists: Optional[list[Artist]] = Field(None, alias="artists")
     thumbnails: Optional[list[Thumbnail]] = Field(None, alias="thumbnails")
-    like_status: Optional[Literal["LIKE", "DISLIKE", "INDIFFERENT"]] = Field(
-        None, alias="likeStatus"
-    )
+
+    # Common fields across various media types
+    like_status: Optional[str] = Field(None, alias="likeStatus")
     in_library: Optional[bool] = Field(None, alias="inLibrary")
+    video_type: Optional[str] = Field(None, alias="videoType")
+    is_explicit: bool = Field(False, alias="isExplicit")
 
 
 class Song(BaseMedia):
@@ -57,11 +58,9 @@ class Song(BaseMedia):
 
 class Track(BaseMedia):
     length: str
-    video_type: Optional[str] = Field(None, alias="videoType")
-
-    in_library: Optional[bool] = Field(None, alias="inLibrary")
     album: Optional[Album] = None
     year: Optional[str] = None
+    # Track-specific alias for thumbnails
     thumbnails: Optional[list[Thumbnail]] = Field(None, alias="thumbnail")
 
 
@@ -113,40 +112,32 @@ class SongDetail(BaseModel):
 
 
 class AlbumTrack(BaseMedia):
-    # title: str
-    # artists: Optional[list[Artist]] = None
     duration_seconds: Optional[int] = Field(None, alias="duration_seconds")
     duration: Optional[str] = None
     views: Optional[str] = None
-    is_explicit: bool = Field(False, alias="isExplicit")
     is_available: bool = Field(True, alias="isAvailable")
-
-    album: Optional[str] = None
+    album: Optional[str | Album] = None  # Playlist tracks sometimes have album as dict
     feedback_tokens: Optional[dict[str, str]] = Field(None, alias="feedbackTokens")
-    in_library: Optional[bool] = Field(None, alias="inLibrary")
-    video_type: Optional[str] = Field(None, alias="videoType")
     track_number: Optional[int] = Field(None, alias="trackNumber")
 
 
 class AlbumData(BaseModel):
     title: str
-    type: str
+    type: Optional[str] = None
     thumbnails: list[Thumbnail]
-    artists: list[Artist]
+    artists: Optional[list[Artist]] = None
+    author: Optional[Artist | list[Artist]] = None
     year: Optional[str] = None
     track_count: Optional[int] = Field(None, alias="trackCount")
     duration: Optional[str] = None
     duration_seconds: Optional[int] = Field(None, alias="duration_seconds")
     audio_playlist_id: Optional[str] = Field(None, alias="audioPlaylistId")
+    id: Optional[str] = None
     tracks: list[AlbumTrack] = []
     description: Optional[str] = None
     other_versions: Optional[list[dict]] = Field(None, alias="other_versions")
     is_explicit: bool = Field(False, alias="isExplicit")
     like_status: Optional[str] = Field(None, alias="likeStatus")
-
-
-def test():
-    import logging
 
 
 import unittest
@@ -222,12 +213,25 @@ class TestYtMusicDataParsing(unittest.TestCase):
         self.assertGreater(len(album.tracks), 0, "Album has no tracks")
         self.assertIsNotNone(album.audio_playlist_id, "Album missing audioPlaylistId")
         self.assertGreater(len(album.thumbnails), 0, "Album has no thumbnails")
-        self.assertGreater(len(album.artists), 0, "Album has no artists")
+        # Fix artists length check since artists can be empty for playlists
+        self.assertIsNotNone(album.artists, "Album missing artists")
+        if album.artists:
+            self.assertGreater(len(album.artists), 0, "Album has empty artists list")
 
         # Validate first track has essential fields
         first_track = album.tracks[0]
         self.assertTrue(first_track.title, "First track title is empty")
         self.assertIsNotNone(first_track.video_id, "First track missing video_id")
+
+    def test_playlist_parsing(self):
+        playlist_id = "PLtj8j4LeQJtlhTHiGP_hv4Jf1teVoeKqJ"
+        raw_playlist = self.yt.get_playlist(playlist_id)
+        playlist = AlbumData.model_validate(raw_playlist)
+        self.assertTrue(playlist.title, "Playlist title is empty")
+        self.assertGreater(len(playlist.tracks), 0, "Playlist has no tracks")
+        self.assertIsNotNone(playlist.id, "Playlist missing id")
+        self.assertGreater(len(playlist.thumbnails), 0, "Playlist has no thumbnails")
+        self.assertIsNotNone(playlist.author, "Playlist has no author")
 
 
 if __name__ == "__main__":

@@ -20,8 +20,6 @@ class NewVideo(BaseMedia):
 
 
 class TrendingItem(BaseMedia):
-    video_type: Optional[str] = Field(None, alias="videoType")
-    is_explicit: Optional[bool] = Field(None, alias="isExplicit")
     playlist_id: Optional[str] = Field(None, alias="playlistId")
     album: Optional[Album] = None
     podcast: Optional[PodcastInfo] = None
@@ -32,7 +30,6 @@ class TrendingItem(BaseMedia):
 class TopEpisode(BaseMedia):
     description: str
     duration: str
-    video_type: str = Field(alias="videoType")
     date: str
     podcast: PodcastInfo
 
@@ -40,7 +37,6 @@ class TopEpisode(BaseMedia):
 class NewRelease(BaseMedia):
     type: str  # e.g., "Album", "Single"
     audio_playlist_id: Optional[str] = Field(None, alias="audioPlaylistId")
-    is_explicit: bool = Field(alias="isExplicit")
 
 
 class Trending(BaseModel):
@@ -85,7 +81,7 @@ def build_trending_list(trending_data: Trending) -> Adw.PreferencesGroup:
 
         row = Adw.ActionRow(
             title=GLib.markup_escape_text(item.title or ""),
-            subtitle=GLib.markup_escape_text(creator or "")
+            subtitle=GLib.markup_escape_text(creator or ""),
         )
 
         # 1. Rank Number

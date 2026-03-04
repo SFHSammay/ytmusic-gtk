@@ -23,7 +23,6 @@ class HomeItemData(BaseMedia):
     playlist_id: Optional[str] = Field(None, alias="playlistId")
     views: Optional[str] = None
     video_type: Optional[str] = Field(None, alias="videoType")
-    is_explicit: Optional[bool] = Field(None, alias="isExplicit")
     album: Optional[Album] = None
 
     # Albums & Singles
@@ -51,7 +50,10 @@ HomePageType = List[HomeSectionData]
 
 
 def HomeItemCard(
-    item: HomeItemData, player_state: PlayerState, yt: ytmusicapi.YTMusic
+    item: HomeItemData,
+    player_state: PlayerState,
+    yt: ytmusicapi.YTMusic,
+    nav_view: Adw.NavigationView,
 ) -> Gtk.Box:
     """
     Creates a card widget for a single item in the Home page.
@@ -222,16 +224,26 @@ def HomeItemCard(
                 return
 
         if item.playlist_id:
-            logging.info(f"Playing playlist: {item}")
-            video_id = item.video_id
-            start_play(
-                state=player_state,
-                playlist_id=item.playlist_id,
-                video_id=video_id,
+            logging.info(f"Opening detail page for playlist {item.playlist_id}")
+            from lib.ui.collection_detail import CollectionDetailPage
+
+            detail_page = CollectionDetailPage(
+                item.playlist_id, "playlist", player_state, yt
             )
+            nav_view.push(detail_page)
             return
 
         if not item.video_id:
+            if item.browse_id and item.browse_id.startswith("MPRE"):
+                logging.info(f"Opening detail page for album {item.browse_id}")
+                from lib.ui.collection_detail import CollectionDetailPage
+
+                detail_page = CollectionDetailPage(
+                    item.browse_id, "album", player_state, yt
+                )
+                nav_view.push(detail_page)
+                return
+
             if item.audio_playlist_id:
                 logging.info(
                     f"Playing album/single via audioPlaylistId: {item.audio_playlist_id}"
@@ -311,7 +323,10 @@ def HomeItemCard(
 
 
 def HomeRow(
-    section: HomeSectionData, player_state: PlayerState, yt: ytmusicapi.YTMusic
+    section: HomeSectionData,
+    player_state: PlayerState,
+    yt: ytmusicapi.YTMusic,
+    nav_view: Adw.NavigationView,
 ) -> tuple[Gtk.Box, Gtk.Box]:
     """
     Creates a standard scrollable horizontal row for a given Home section.
@@ -342,7 +357,7 @@ def HomeRow(
     row_box.set_margin_bottom(8)  # Prevents horizontal scrollbar from overlapping text
 
     for item in section.contents:
-        row_box.append(HomeItemCard(item, player_state, yt))
+        row_box.append(HomeItemCard(item, player_state, yt, nav_view))
 
     scrolled.set_child(row_box)
     box.append(scrolled)
@@ -354,14 +369,21 @@ def HomeRow(
 def HomePage(
     yt_subject: BehaviorSubject[Optional[ytmusicapi.YTMusic]],
     player_state: PlayerState,
-) -> Gtk.ScrolledWindow:
+) -> Adw.NavigationView:
     """
     Builds the Home page UI, which consists of multiple sections (e.g. "Recently Played", "Recommended Mixes").
     Each section is rendered as a HomeRow with a header and a horizontal carousel of HomeItemCards.
     The page also implements infinite scrolling by listening to the scroll position and fetching more data when the user reaches the bottom.
     """
+    nav_view = Adw.NavigationView()
+
+    # Wrap the scrolled window in a NavigationPage
+    home_page = Adw.NavigationPage(title="Home")
+    nav_view.add(home_page)
+
     scrolled = Gtk.ScrolledWindow()
     scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+    home_page.set_child(scrolled)
 
     # 1. THE CLAMP: This makes the UI look premium on widescreen monitors
     clamp = Adw.Clamp()
@@ -447,14 +469,14 @@ def HomePage(
                 if len(section.contents) > current_count:
                     new_items = section.contents[current_count:]
                     for item in new_items:
-                        carousel.append(HomeItemCard(item, player_state, yt))
+                        carousel.append(HomeItemCard(item, player_state, yt, nav_view))
                     row_cache[section.title] = (
                         section_box,
                         carousel,
                         len(section.contents),
                     )
             else:
-                section_box, carousel = HomeRow(section, player_state, yt)
+                section_box, carousel = HomeRow(section, player_state, yt, nav_view)
                 home_box.append(section_box)
                 row_cache[section.title] = (
                     section_box,
@@ -550,4 +572,4 @@ def HomePage(
 
     yt_subject.subscribe(on_next=on_yt_changed, on_error=on_rx_error)
 
-    return scrolled
+    return nav_view

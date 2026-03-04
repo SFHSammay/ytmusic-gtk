@@ -17,6 +17,7 @@ This primary skill provides the core architectural context and programming guide
 - Provide **maximum possible type hinting** for all classes, arguments, returns, and variables.
 - Utilize modern Python type-hinting features available in 3.13:
   - Use `|` instead of `Union`.
+  - Use Literal str when possible.
   - Use `Optional[T]` instead of `T | None`.
   - Use built-in generic collections (e.g., `list[str]`, `dict[str, int]`, `tuple[int, ...]`) instead of importing from `typing`.
   - Use Python 3.12+ type parameter syntax (`class MyClass[T]:` or `def generic_func[T](arg: T) -> T:`) for generic definitions.
