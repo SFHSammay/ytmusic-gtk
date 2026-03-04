@@ -17,8 +17,6 @@ def NowPlayingView(
     view = Adw.ToolbarView()
     view.add_css_class("background")
 
-    # Forces the view to have a solid background (matches light/dark mode automatically)
-
     # Main Content Box
     split_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
     split_box.set_margin_start(32)
