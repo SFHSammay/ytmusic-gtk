@@ -1,7 +1,7 @@
 [project]
 name = "ytmusic-gtk"
 version = "0.1.0"
-description = "Add your description here"
+description = "A GTK4 client for YouTube Music"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -17,6 +17,11 @@ dependencies = [
     "yt-dlp[default]>=2026.2.21",
     "ytmusicapi>=1.11.5",
 ]
+
+[project.metadata]
+app_name = "YT Music"
+app_id = "com.yamadasexta.YTMusicApp"
+developer_name = "Yamada Sexta"
 
 [tool.pyrefly]
 project-includes = [

@@ -34,12 +34,33 @@ def main():
 
     from gi.repository import GLib
 
-    GLib.set_prgname("ytmusic-gtk")
-    GLib.set_application_name("YT Music")
+    # Read properties from pyproject.toml
+    import tomllib
+
+    with open("pyproject.toml", "rb") as f:
+        pyproject = tomllib.load(f)
+
+    app_name = pyproject["project"]["metadata"]["app_name"]
+    app_id = pyproject["project"]["metadata"]["app_id"]
+    developer_name = pyproject["project"]["metadata"]["developer_name"]
+    app_version = pyproject["project"]["version"]
+    logging.info(f"Application name: {app_name}")
+    logging.info(f"Application ID: {app_id}")
+    logging.info(f"Developer name: {developer_name}")
+    logging.info(f"Application version: {app_version}")
+
+    GLib.set_prgname(app_name)
+    GLib.set_application_name(app_name)
 
     from lib.ui.app import YTMusicApp
 
-    app = YTMusicApp(application_id="com.example.YTMusicApp")
+    app = YTMusicApp(
+        application_id=app_id,
+        application_name=app_name,
+        application_icon=app_id,
+        developer_name=developer_name,
+        app_version=app_version,
+    )
     app.run(sys.argv)
 
 
