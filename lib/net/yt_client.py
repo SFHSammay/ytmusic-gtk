@@ -1,3 +1,4 @@
+from reactivex.scheduler.mainloop.gtkscheduler import GtkScheduler
 from lib.data import LikeStatus
 from lib.data import RateSongResponse
 from lib.data import HomePageTypeAdapter
@@ -8,6 +9,7 @@ from typing import Any
 import multiprocessing
 from functools import wraps
 from typing import Optional, Callable, TypeVar, ParamSpec, cast
+from reactivex import operators as ops
 
 import ytmusicapi
 import reactivex as rx

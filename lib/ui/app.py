@@ -1,14 +1,18 @@
+from reactivex.subject import BehaviorSubject
+import logging
+from reactivex.scheduler.mainloop.gtkscheduler import GtkScheduler
+from lib.net.yt_client import thread_pool_scheduler
 from lib.net.client import auto_login
 from lib.net.yt_client import YTClient
 from typing import Optional
 from lib.ui.about import show_about_window
-import ytmusicapi
-from reactivex.subject import BehaviorSubject
 from lib.ui.main_window import YTMusicWindow
 from pathlib import Path
 import logging
 from gi.repository import Gtk, Adw, Gst, GLib, Pango, Gio, GdkPixbuf, Gdk, GObject
-
+import reactivex as rx
+from reactivex import operators as ops
+from reactivex.scheduler import ThreadPoolScheduler
 import os
 import subprocess
 import sys
@@ -43,7 +47,15 @@ class YTMusicApp(Adw.Application):
         self.connect("startup", self.on_startup)
         self.connect("activate", self.on_activate)
 
+        self.win: Optional[YTMusicWindow] = None
+        # Create the subject here!
+        self.client_subject = BehaviorSubject[Optional[YTClient]](None)
+        logging.debug(
+            f"YTMusicApp initialized with ID: {application_id}, Name: {application_name}"
+        )
+
     def on_startup(self, app: Gtk.Application):
+        logging.info("Application starting up...")
         display = Gdk.Display.get_default()
         if not display:
             logging.warning("Could not get default display for icon theming.")
@@ -104,26 +116,41 @@ class YTMusicApp(Adw.Application):
 
         setup_macos_dock_handler(self)
 
+        logging.info("Application startup complete.")
+
     def on_activate(self, app: Gtk.Application):
+        logging.info("Application activated.")
         if self.win:
             self.win.set_visible(True)
             self.win.present()
             return
-        # self.yt_subject = BehaviorSubject[YTClient | None](None)
-        api = auto_login()
-        if not api:
-            logging.error("Failed to initialize YTMusic API client.")
-            return
-        client = YTClient(api)
+        logging.info("Activating application and initializing main window.")
+
         self.win = YTMusicWindow(
             application=app,
             app_name=self.application_name,
             app_id=self.application_id,
-            client=client,
+            client_obs=self.client_subject,
         )
+
         self.win.present()
 
-    def on_preferences_action(self, action, param):
+        if self.client_subject.value is None:
+
+            def dispatch_on_next(client):
+                GLib.idle_add(self.client_subject.on_next, client)
+
+            rx.from_callable(auto_login).pipe(
+                ops.subscribe_on(thread_pool_scheduler),
+                ops.filter(lambda api: api is not None),
+                ops.map(lambda api: YTClient(api)),
+            ).subscribe(
+                on_next=dispatch_on_next,
+                on_error=lambda e: logging.error(f"Init failed: {e}"),
+            )
+
+    def on_preferences_action(
+        self, action: Gio.SimpleAction, param: Optional[Gio.ActionGroup]
+    ):
         """Placeholder for a preferences window."""
         logging.info("Preferences menu item clicked.")
-        # E.g., Adw.PreferencesWindow().present()

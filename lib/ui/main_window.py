@@ -1,3 +1,7 @@
+from typing import Optional
+import logging
+from reactivex.operators import take
+from reactivex import Observable
 from lib.net.yt_client import YTClient
 from lib.ui.play_view import NowPlayingView
 from lib.ui.search_bar import create_search_bar
@@ -11,32 +15,75 @@ from lib.ui.home import HomePage
 
 
 class YTMusicWindow(Adw.ApplicationWindow):
-
-    def __init__(self, client: YTClient, app_name: str, app_id: str, **kwargs):
+    def __init__(
+        self,
+        client_obs: BehaviorSubject[Optional["YTClient"]],
+        app_name: str,
+        app_id: str,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
-        logging.info("Initializing YT Music App UI...")
+        logging.debug("Initializing YTMusicWindow with client observable.")
+        self.app_name = app_name
+        self.app_id = app_id
+
         self.set_default_size(900, 700)
         self.set_title(app_name)
         self.set_icon_name(app_id)
 
+        # 1. Create a Root Stack to handle the "Placeholder" vs "Loaded" states
+        self.window_stack = Gtk.Stack()
+        self.window_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.set_content(self.window_stack)
+
+        # 2. Add a Loading View (The Placeholder)
+        loading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        loading_box.set_valign(Gtk.Align.CENTER)
+
+        spinner = Adw.Spinner()
+        spinner.set_size_request(48, 48)
+
+        loading_label = Gtk.Label(label="Connecting to YouTube Music...")
+        loading_label.add_css_class("caption")
+
+        loading_box.append(spinner)
+        loading_box.append(loading_label)
+        self.window_stack.add_named(loading_box, "loading")
+
+        # 3. Subscribe to the Client Observable
+        # client_obs.pipe(take(1)).subscribe(
+        #     on_next=lambda client: (GLib.idle_add(self._setup_main_ui, client), None)[1]
+        # )
+        # client_obs.subscribe(
+        #     on_next=lambda client: (GLib.idle_add(self._setup_main_ui, client), None)[1]
+        # )
+        def on_client_received(client: Optional[YTClient]):
+            if client:
+                logging.info("YTClient received in window. Setting up main UI.")
+                GLib.idle_add(self._setup_main_ui, client)
+            else:
+                logging.warning("Received None for YTClient. Still waiting...")
+
+        client_obs.subscribe(on_next=on_client_received)
+
+    def _setup_main_ui(self, client: "YTClient"):
+        """Constructs the actual application UI once the client is ready."""
+        logging.info("YTClient received. Building Main UI...")
+
+        # Initialize State with the concrete client
         self.player_state = PlayerState(client=client)
         self._player = setup_player(self.player_state)
-
         show_now_playing = BehaviorSubject(False)
 
-        # ROOT CONTAINER (Anchors the PlayBar globally)
+        # --- Your Original UI Logic Starts Here ---
         root_toolbar_view = Adw.ToolbarView()
-        self.set_content(root_toolbar_view)
-
-        # The PlayBar is securely fastened to the bottom of the window
         root_toolbar_view.add_bottom_bar(PlayBar(self.player_state, show_now_playing))
 
-        # NavigationView sits above the play bar, below the window chrome
         self.nav_view = Adw.NavigationView()
         root_toolbar_view.set_content(self.nav_view)
 
         # Root navigation page holds the header + main content
-        root_nav_page = Adw.NavigationPage(title=app_name)
+        root_nav_page = Adw.NavigationPage(title=self.app_name)
         self.nav_view.add(root_nav_page)
 
         # Inner toolbar holds the global header bar and the main stack
@@ -132,6 +179,9 @@ class YTMusicWindow(Adw.ApplicationWindow):
         # DETAIL PAGE (Now Playing)
         now_playing_view = NowPlayingView(self.player_state)
         self.main_stack.add_named(now_playing_view, "now_playing")
+
+        self.window_stack.add_named(root_toolbar_view, "main")
+        self.window_stack.set_visible_child_name("main")
 
         # REACTIVE NAVIGATION LOGIC
         def on_nav_state_changed(show: bool):

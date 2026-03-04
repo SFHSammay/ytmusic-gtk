@@ -1,12 +1,13 @@
 import logging
-import os
 import sys
-import subprocess
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.DEBUG, format="[%(levelname)s] %(name)s: %(message)s"
+    )
     from lib.sys.mac_gi import mac_brew_fix
+
     mac_brew_fix()
 
     import gi
