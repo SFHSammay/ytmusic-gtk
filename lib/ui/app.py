@@ -55,6 +55,10 @@ class YTMusicApp(Adw.Application):
         setup_tray(self)
 
     def on_activate(self, app: Gtk.Application):
+        if self.win:
+            self.win.set_visible(True)
+            self.win.present()
+            return
         self.yt_subject = BehaviorSubject[ytmusicapi.YTMusic | None](None)
         self.win = YTMusicWindow(application=app, yt_subject=self.yt_subject)
         self.win.present()
