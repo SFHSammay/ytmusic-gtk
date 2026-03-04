@@ -16,6 +16,7 @@ class YTMusicApp(Adw.Application):
     application_icon: str
     developer_name: str
     app_version: str
+    repo_url: str
 
     def __init__(
         self,
@@ -24,6 +25,7 @@ class YTMusicApp(Adw.Application):
         application_icon: str,
         developer_name: str,
         app_version: str,
+        repo_url: str,
         **kwargs,
     ):
         super().__init__(application_id=application_id, **kwargs)
@@ -31,6 +33,7 @@ class YTMusicApp(Adw.Application):
         self.application_icon = application_icon
         self.developer_name = developer_name
         self.app_version = app_version
+        self.repo_url = repo_url
         self.win: YTMusicWindow | None = None
         self._tray_icon = None
         self._tray_process: subprocess.Popen[str] | None = None
@@ -76,6 +79,7 @@ class YTMusicApp(Adw.Application):
                 application_icon=self.application_icon,
                 developer_name=self.developer_name,
                 app_version=self.app_version,
+                repo_url=self.repo_url,
                 parent=self.get_active_window(),
             )
 

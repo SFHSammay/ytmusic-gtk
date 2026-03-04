@@ -7,6 +7,7 @@ def show_about_window(
     application_icon: str,
     developer_name: str,
     app_version: str,
+    repo_url: str,
     parent: Optional[Gtk.Window] = None,
 ) -> None:
     """Displays the Adwaita About Window."""
@@ -16,8 +17,8 @@ def show_about_window(
         developer_name=developer_name,
         version=app_version,
         copyright="© 2026 Yamada Sexta",
-        website="https://github.com/yamada-sexta/ytmusic-gtk",
-        issue_url="https://github.com/yamada-sexta/ytmusic-gtk/issues",
+        website=repo_url,
+        issue_url=f"{repo_url}/issues",
         license_type=Gtk.License.LGPL_3_0,
     )
     if parent:

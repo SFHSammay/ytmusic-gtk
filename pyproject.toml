@@ -22,6 +22,7 @@ dependencies = [
 app_name = "YT Music"
 app_id = "com.yamadasexta.YTMusicApp"
 developer_name = "Yamada Sexta"
+repo = "https://github.com/yamada-sexta/ytmusic-gtk"
 
 [tool.pyrefly]
 project-includes = [

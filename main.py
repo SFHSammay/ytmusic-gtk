@@ -44,10 +44,12 @@ def main():
     app_id = pyproject["project"]["metadata"]["app_id"]
     developer_name = pyproject["project"]["metadata"]["developer_name"]
     app_version = pyproject["project"]["version"]
+    repo_url = pyproject["project"]["metadata"]["repo"]
     logging.info(f"Application name: {app_name}")
     logging.info(f"Application ID: {app_id}")
     logging.info(f"Developer name: {developer_name}")
     logging.info(f"Application version: {app_version}")
+    logging.info(f"Repository URL: {repo_url}")
 
     GLib.set_prgname(app_name)
     GLib.set_application_name(app_name)
@@ -60,6 +62,7 @@ def main():
         application_icon=app_id,
         developer_name=developer_name,
         app_version=app_version,
+        repo_url=repo_url,
     )
     app.run(sys.argv)
 
