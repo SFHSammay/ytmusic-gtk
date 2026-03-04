@@ -1,10 +1,13 @@
-from ytmusicapi import LikeStatus
+import logging
 from pydantic import TypeAdapter
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
+import unittest
+import ytmusicapi
 
 LikeStatus = Literal["INDIFFERENT", "LIKE", "DISLIKE"]
+
 
 class AccountInfo(BaseModel):
     # Field aliases map the JSON key to your Python variable
@@ -142,8 +145,110 @@ class AlbumData(BaseModel):
     like_status: Optional[str] = Field(None, alias="likeStatus")
 
 
-import unittest
-import ytmusicapi
+class HomeItemData(BaseMedia):
+    # Tracks & Quick Picks
+    playlist_id: Optional[str] = Field(None, alias="playlistId")
+    views: Optional[str] = None
+    video_type: Optional[str] = Field(None, alias="videoType")
+    album: Optional[Album] = None
+
+    # Albums & Singles
+    audio_playlist_id: Optional[str] = Field(None, alias="audioPlaylistId")
+
+    # Playlists & Mixes
+    description: Optional[str] = None
+    count: Optional[str] = None
+    # Note: Playlists often use 'author' instead of 'artists',
+    # but the data structure inside is identical to 'Artist'
+    author: Optional[list[Artist]] = None
+
+
+class HomeSectionData(BaseModel):
+    title: str
+    contents: list[HomeItemData]
+
+
+HomePageTypeAdapter = TypeAdapter(list[HomeSectionData])
+
+
+# Reusable Utility Models
+class Param(BaseModel):
+    key: str
+    value: str
+
+
+class ServiceTrackingParam(BaseModel):
+    service: str
+    params: list[Param]
+
+
+class ResponseContext(BaseModel):
+    service_tracking_params: list[ServiceTrackingParam] = Field(
+        alias="serviceTrackingParams"
+    )
+
+
+class Run(BaseModel):
+    text: str
+
+
+class FormattedText(BaseModel):
+    """YouTube heavily uses 'runs' arrays to format text strings."""
+
+    runs: list[Run]
+
+
+class BrowseEndpoint(BaseModel):
+    browse_id: str = Field(alias="browseId")
+
+
+class NavigationEndpoint(BaseModel):
+    click_tracking_params: Optional[str] = Field(None, alias="clickTrackingParams")
+    browse_endpoint: Optional[BrowseEndpoint] = Field(None, alias="browseEndpoint")
+
+
+# Action and Renderer Models
+class ButtonRenderer(BaseModel):
+    style: Optional[str] = None
+    is_disabled: bool = Field(False, alias="isDisabled")
+    text: Optional[FormattedText] = None
+    navigation_endpoint: Optional[NavigationEndpoint] = Field(
+        None, alias="navigationEndpoint"
+    )
+    tracking_params: Optional[str] = Field(None, alias="trackingParams")
+
+
+class ActionButton(BaseModel):
+    button_renderer: ButtonRenderer = Field(alias="buttonRenderer")
+
+
+class NotificationActionRenderer(BaseModel):
+    response_text: Optional[FormattedText] = Field(None, alias="responseText")
+    action_button: Optional[ActionButton] = Field(None, alias="actionButton")
+    tracking_params: Optional[str] = Field(None, alias="trackingParams")
+
+
+class ToastItem(BaseModel):
+    notification_action_renderer: NotificationActionRenderer = Field(
+        alias="notificationActionRenderer"
+    )
+
+
+class AddToToastAction(BaseModel):
+    item: ToastItem
+
+
+class Action(BaseModel):
+    click_tracking_params: Optional[str] = Field(None, alias="clickTrackingParams")
+    add_to_toast_action: Optional[AddToToastAction] = Field(
+        None, alias="addToToastAction"
+    )
+
+
+# Like Response Models
+class LikeResponse(BaseModel):
+    response_context: Optional[ResponseContext] = Field(None, alias="responseContext")
+    actions: Optional[list[Action]] = None
 
 
 class TestYtMusicDataParsing(unittest.TestCase):
@@ -235,8 +340,63 @@ class TestYtMusicDataParsing(unittest.TestCase):
         self.assertGreater(len(playlist.thumbnails), 0, "Playlist has no thumbnails")
         self.assertIsNotNone(playlist.author, "Playlist has no author")
 
+    def test_rate_song(self):
+
+        # This test will like and then dislike a song, then reset to indifferent
+        history_data = self.yt.get_history()
+        songs = Songs.validate_python(history_data)
+
+        self.assertGreater(len(songs), 0, "Need history to test rate song")
+        self.assertIsNotNone(
+            songs[0].video_id, "Need a video_id from history to test rate song"
+        )
+        video_id = songs[0].video_id
+
+        # Like the song
+        res = self.yt.rate_song(video_id, ytmusicapi.LikeStatus.LIKE)
+        logging.info(f"Like response: {res}")
+        import json
+
+        with open("debug_like_response.json", "w") as f:
+            json.dump(res, f, indent=2)
+
+        # Dislike the song
+        res = self.yt.rate_song(video_id, ytmusicapi.LikeStatus.DISLIKE)
+        logging.info(f"Dislike response: {res}")
+        with open("debug_dislike_response.json", "w") as f:
+            json.dump(res, f, indent=2)
+
+        # Reset to indifferent
+        res = self.yt.rate_song(video_id, ytmusicapi.LikeStatus.INDIFFERENT)
+        logging.info(f"Indifferent response: {res}")
+        with open("debug_indifferent_response.json", "w") as f:
+            json.dump(res, f, indent=2)
+        # song_data = self.yt.get_song(video_id)
+        # song_detail = SongDetail.model_validate(song_data)
+        # self.assertEqual(
+        #     song_detail.video_details.video_id,
+        #     video_id,
+        #     "Mismatch in video ID after like",
+        # )
+        # self.assertEqual(
+        #     song_detail.microformat.microformat_data_renderer.title,
+        #     song_detail.video_details.title,
+        #     "Title mismatch between video details and microformat after like",
+        # )
+
 
 if __name__ == "__main__":
+    # from lib.net.client import auto_login
+    import sys
+    import os
+    from pathlib import Path
+
+    # Add parent directory to sys.path for imports
+    # sys.path.append(str(Path(__file__).parent.parent.parent.resolve()))
+    dir = Path(__file__).parent.parent.resolve()
+    print(f"Adding {dir} to sys.path for imports")
+    sys.path.append(str(dir))
+
     from lib.net.client import auto_login
 
     unittest.main()

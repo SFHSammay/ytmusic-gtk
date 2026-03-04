@@ -1,39 +1,25 @@
-import ytmusicapi
-from typing import Optional
-import threading
+from lib.net.yt_client import YTClient
 from lib.ui.play_view import NowPlayingView
 from lib.ui.search_bar import create_search_bar
 from reactivex.subject import BehaviorSubject
 import logging
-import gi
 
-gi.require_version("Gtk", "4.0")
-gi.require_version("Adw", "1")
-gi.require_version("Gst", "1.0")
-gi.require_version("Pango", "1.0")
-gi.require_version("Gio", "2.0")
-gi.require_version("GdkPixbuf", "2.0")
-gi.require_version("Gdk", "4.0")
 from gi.repository import Gtk, Adw, Gst, GLib, Pango, Gio, GdkPixbuf, Gdk, GObject
-from lib.ui.explore import ExplorePage
 from lib.ui.play_bar import PlayBar, PlayerState
 from lib.state.player_state import setup_player
 from lib.ui.home import HomePage
-from lib.net.client import auto_login
 
 
 class YTMusicWindow(Adw.ApplicationWindow):
 
-    def __init__(
-        self, yt_subject: BehaviorSubject[Optional[ytmusicapi.YTMusic]], **kwargs
-    ):
+    def __init__(self, client: YTClient, app_name: str, app_id: str, **kwargs):
         super().__init__(**kwargs)
         logging.info("Initializing YT Music App UI...")
         self.set_default_size(900, 700)
-        self.set_title("YT Music")
-        self.set_icon_name("com.example.YTMusicApp")
+        self.set_title(app_name)
+        self.set_icon_name(app_id)
 
-        self.player_state = PlayerState(yt=yt_subject)
+        self.player_state = PlayerState(client=client)
         self._player = setup_player(self.player_state)
 
         show_now_playing = BehaviorSubject(False)
@@ -50,7 +36,7 @@ class YTMusicWindow(Adw.ApplicationWindow):
         root_toolbar_view.set_content(self.nav_view)
 
         # Root navigation page holds the header + main content
-        root_nav_page = Adw.NavigationPage(title="YT Music")
+        root_nav_page = Adw.NavigationPage(title=app_name)
         self.nav_view.add(root_nav_page)
 
         # Inner toolbar holds the global header bar and the main stack
@@ -122,13 +108,13 @@ class YTMusicWindow(Adw.ApplicationWindow):
         # Add pages to your ViewStack
         main_toolbar_view.set_content(self.view_stack)
         self.view_stack.add_titled_with_icon(
-            HomePage(yt_subject, self.player_state, self.nav_view),
+            HomePage(client, self.player_state, self.nav_view),
             "home",
             "Home",
             "go-home-symbolic",
         )
         self.view_stack.add_titled_with_icon(
-            ExplorePage(yt_subject, self.nav_view),
+            Gtk.Label(label="Library Coming Soon!"),
             "explore",
             "Explore",
             "compass2-symbolic",
@@ -165,7 +151,7 @@ class YTMusicWindow(Adw.ApplicationWindow):
 
         self.connect("close-request", self._on_close_request)
 
-        self.fetch_data_async(yt_subject)
+        # self.fetch_data_async(client)
 
     def _on_close_request(self, window: Adw.ApplicationWindow) -> bool:
         """Hide the window instead of destroying it to keep running in the tray."""
@@ -175,18 +161,3 @@ class YTMusicWindow(Adw.ApplicationWindow):
             self.set_visible(False)
             return True
         return False
-
-    def fetch_data_async(
-        self, yt_subject: BehaviorSubject[Optional[ytmusicapi.YTMusic]]
-    ):
-        def task():
-            try:
-                yt = auto_login()
-                if not yt:
-                    return
-                yt_subject.on_next(yt)
-            except Exception as e:
-                logging.error(f"Error fetching data: {e}")
-
-        thread = threading.Thread(target=task, daemon=True)
-        thread.start()

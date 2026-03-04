@@ -1,5 +1,7 @@
+from lib.data import HomeSectionData
+from lib.data import HomeItemData
 from lib.net.yt_client import YTClient
-from lib.state.player_state import LikeStatus, start_play
+from lib.state.player_state import start_play
 from lib.state.player_state import MediaStatus
 from lib.ui.thumbnail import ThumbnailWidget
 from reactivex import Subject
@@ -19,35 +21,12 @@ from lib.ui.play_bar import PlayerState
 from lib.state.player_state import PlayState
 
 
-class HomeItemData(BaseMedia):
-    # Tracks & Quick Picks
-    playlist_id: Optional[str] = Field(None, alias="playlistId")
-    views: Optional[str] = None
-    video_type: Optional[str] = Field(None, alias="videoType")
-    album: Optional[Album] = None
-
-    # Albums & Singles
-    audio_playlist_id: Optional[str] = Field(None, alias="audioPlaylistId")
-
-    # Playlists & Mixes
-    description: Optional[str] = None
-    count: Optional[str] = None
-    # Note: Playlists often use 'author' instead of 'artists',
-    # but the data structure inside is identical to 'Artist'
-    author: Optional[List[Artist]] = None
-
-
-class HomeSectionData(BaseModel):
-    title: str
-    contents: List[HomeItemData]
-
-
 # Since the root of the Home data is a List (not a dictionary),
 # we use TypeAdapter just like you did for History.
-HomePageTypeAdapter = TypeAdapter(List[HomeSectionData])
+# HomePageTypeAdapter = TypeAdapter(List[HomeSectionData])
 
 # Get type of HomePage for type hinting
-HomePageType = List[HomeSectionData]
+# HomePageType = List[HomeSectionData]
 
 
 def HomeItemCard(
@@ -446,7 +425,7 @@ def HomeRow(
 
 
 def HomePage(
-    yt_subject: BehaviorSubject[Optional[YTClient]],
+    client: YTClient,
     player_state: PlayerState,
     nav_view: Adw.NavigationView,
 ) -> Gtk.ScrolledWindow:
@@ -496,15 +475,15 @@ def HomePage(
     )
     scroll_subject = Subject()
 
-    def update_ui(
-        home: HomePageType, is_reset: bool, client: Optional[YTClient]
-    ) -> bool:
+    def reset_home_page():
+        while (child := home_box.get_first_child()) is not None:
+            home_box.remove(child)
+        row_cache.clear()
+        has_more.on_next(True)
 
+    def update_ui(home: HomePageType, is_reset: bool, client: YTClient) -> bool:
         if is_reset:
-            while (child := home_box.get_first_child()) is not None:
-                home_box.remove(child)
-            row_cache.clear()
-            has_more.on_next(True)
+            reset_home_page()
 
         # Beautiful Native Loading State
         if not client:

@@ -83,9 +83,10 @@ class CurrentPlaylist:
 class PlayerState:
     """Holds all reactive state and playing logic for the app."""
 
-    yt: BehaviorSubject[Optional[YTClient]] = field(
-        default_factory=lambda: BehaviorSubject[Optional[YTClient]](None)
-    )
+    # yt: BehaviorSubject[Optional[YTClient]] = field(
+    #     default_factory=lambda: BehaviorSubject[Optional[YTClient]](None)
+    # )
+    client: YTClient
     state: BehaviorSubject[PlayState] = field(
         default_factory=lambda: BehaviorSubject(PlayState.EMPTY)
     )
@@ -185,7 +186,7 @@ def start_play(
 ) -> None:
     import threading
 
-    yt = state.yt.value
+    yt = state.client
     if not yt:
         logging.error("No YTMusic instance available.")
         return

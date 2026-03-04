@@ -1,3 +1,4 @@
+from lib.net.client import auto_login
 from lib.net.yt_client import YTClient
 from typing import Optional
 from lib.ui.about import show_about_window
@@ -107,8 +108,13 @@ class YTMusicApp(Adw.Application):
             self.win.set_visible(True)
             self.win.present()
             return
-        self.yt_subject = BehaviorSubject[YTClient | None](None)
-        self.win = YTMusicWindow(application=app, yt_subject=self.yt_subject)
+        # self.yt_subject = BehaviorSubject[YTClient | None](None)
+        api = auto_login()
+        if not api:
+            logging.error("Failed to initialize YTMusic API client.")
+            return
+        client = YTClient(api)
+        self.win = YTMusicWindow(application=app, client=client)
         self.win.present()
 
     def on_preferences_action(self, action, param):
