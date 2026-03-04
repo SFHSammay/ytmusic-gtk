@@ -16,6 +16,7 @@ def setup_tray(app: "YTMusicApp") -> None:
 
     base_dir = Path(__file__).parent.parent.parent.resolve()
     icon_path = str(base_dir / "assets" / "icons" / "folder-music-symbolic.svg")
+    app_icon_path = str(base_dir / "assets" / "icons" / "com.example.YTMusicApp.svg")
     tray_script = str(Path(__file__).parent / "tray_process.py")
 
     def show_window() -> bool:
@@ -42,7 +43,7 @@ def setup_tray(app: "YTMusicApp") -> None:
 
     try:
         proc = subprocess.Popen(
-            [sys.executable, tray_script, icon_path],
+            [sys.executable, tray_script, icon_path, app_icon_path],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
