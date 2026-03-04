@@ -43,29 +43,6 @@ def format_time_to_seconds(time_str: str) -> int:
         hours = int(parts[-3])
     return hours * 3600 + minutes * 60 + seconds
 
-def create_album_art_card() -> tuple["Gtk.Widget", "Gtk.Picture"]:
-    """
-    Creates a functional component wrapper for Album Art that guarantees the card
-    clipping border perfectly matches the image aspect ratio dynamically.
-    Returns: (ContainerWidget, Gtk.Picture)
-    """
-    frame = Gtk.AspectFrame()
-    # obey_child=False allows us to manually set the bounds of the card as soon as the image loads
-    frame.set_obey_child(False)
-    frame.set_halign(Gtk.Align.CENTER)
-    frame.set_valign(Gtk.Align.CENTER)
-
-    card_box = Gtk.Box()
-    card_box.add_css_class("card")
-
-    pic = Gtk.Picture()
-    pic.set_can_shrink(True)
-    # The picture completely fills whatever proportion we dynamically give the AspectFrame card
-    pic.set_content_fit(Gtk.ContentFit.FILL)
-
-    card_box.append(pic)
-    frame.set_child(card_box)
-    return frame, pic
 
 
 # Unit test

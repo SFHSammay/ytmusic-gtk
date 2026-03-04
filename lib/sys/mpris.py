@@ -201,14 +201,6 @@ def setup_mpris_controller(state: "PlayerState") -> None:
             {"Metadata": GLib.Variant("a{sv}", get_metadata())},
         )
 
-    # def on_current_changed(current: Optional["CurrentMusic"]) -> None:
-    #     if not current:
-    #         return
-    #     combine_latest(
-    #         current.title,
-    #         current.artist,
-    #         state.stream.total_time,
-    #     ).subscribe(on_metadata_changed)
     def on_current_changed(current: Optional["MediaStatus"]) -> None:
         if not current:
             return

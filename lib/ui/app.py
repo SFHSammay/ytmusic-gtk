@@ -1,3 +1,4 @@
+from typing import Optional
 from lib.ui.about import show_about_window
 import ytmusicapi
 from reactivex.subject import BehaviorSubject
@@ -34,9 +35,8 @@ class YTMusicApp(Adw.Application):
         self.developer_name = developer_name
         self.app_version = app_version
         self.repo_url = repo_url
-        self.win: YTMusicWindow | None = None
-        self._tray_icon = None
-        self._tray_process: subprocess.Popen[str] | None = None
+        self.win: Optional[YTMusicWindow] = None
+        self._tray_process: Optional[subprocess.Popen[str]] = None
         self.connect("startup", self.on_startup)
         self.connect("activate", self.on_activate)
 
@@ -109,21 +109,6 @@ class YTMusicApp(Adw.Application):
         self.yt_subject = BehaviorSubject[ytmusicapi.YTMusic | None](None)
         self.win = YTMusicWindow(application=app, yt_subject=self.yt_subject)
         self.win.present()
-
-    # def on_about_action(self, action: Gio.SimpleAction, param: Gio.ActionGroup):
-    #     """Displays the Adwaita About Window."""
-    #     about = Adw.AboutWindow(
-    #         application_name=self.application_name,
-    #         application_icon=self.application_icon,
-    #         developer_name=self.developer_name,
-    #         version=self.app_version,
-    #         copyright="© 2026 Yamada Sexta\nThis application comes with absolutely no warranty. See the GNU General Public License, version 2 or later for details.",
-    #         website="https://github.com/yamada-sexta/ytmusic-gtk",
-    #         issue_url="https://github.com/yamada-sexta/ytmusic-gtk/issues",
-    #     )
-    #     # Attach the about window to the main app window so it behaves as a modal
-    #     about.set_transient_for(self.get_active_window())
-    #     about.present()
 
     def on_preferences_action(self, action, param):
         """Placeholder for a preferences window."""
