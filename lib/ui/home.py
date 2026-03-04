@@ -194,27 +194,39 @@ def HomeItemCard(
 
     # Add a small play button on the bottom-right for collection items
     is_collection = not item.video_id
+    collection_play_btn: Optional[Gtk.Button] = None
     if is_collection:
         collection_play_btn = Gtk.Button(icon_name="media-playback-start-symbolic")
-        collection_play_btn.add_css_class("suggested-action")
+        # collection_play_btn.add_css_class("suggested-action")
         collection_play_btn.add_css_class("circular")
-        collection_play_btn.set_size_request(36, 36)
+        collection_play_btn.add_css_class("collection-play-btn")
+        collection_play_btn.set_size_request(48, 48)
         collection_play_btn.set_halign(Gtk.Align.END)
         collection_play_btn.set_valign(Gtk.Align.END)
         collection_play_btn.set_margin_end(8)
         collection_play_btn.set_margin_bottom(8)
         collection_play_btn.set_tooltip_text("Play")
-
-        def on_collection_play(_btn: Gtk.Button) -> None:
-            playlist_id = item.audio_playlist_id or item.playlist_id
-            if not playlist_id:
-                logging.warning(f"Collection {item.title} has no playlist ID to play.")
-                return
-            logging.info(f"Quick-playing collection: {item.title} ({playlist_id})")
-            start_play(state=player_state, playlist_id=playlist_id)
-
-        collection_play_btn.connect("clicked", on_collection_play)
+        collection_play_btn.set_opacity(0.0)
+        collection_play_btn.set_can_target(False)
         overlay.add_overlay(collection_play_btn)
+
+        # ReactiveX hover state
+        hover_subject = BehaviorSubject(False)
+
+        hover_ctrl = Gtk.EventControllerMotion()
+        hover_ctrl.connect("enter", lambda *_: hover_subject.on_next(True))
+        hover_ctrl.connect("leave", lambda *_: hover_subject.on_next(False))
+        overlay.add_controller(hover_ctrl)
+
+        def on_hover_changed(is_hovered: bool) -> None:
+            def update() -> int:
+                if collection_play_btn:
+                    collection_play_btn.set_opacity(1.0 if is_hovered else 0.0)
+                return GLib.SOURCE_REMOVE
+
+            GLib.idle_add(update)
+
+        hover_subject.subscribe(on_hover_changed)
 
     card.append(overlay)
     card.append(text_box)
@@ -222,9 +234,27 @@ def HomeItemCard(
     click = Gtk.GestureClick.new()
 
     def on_card_click(gesture: Gtk.GestureClick, n_press: int, x: float, y: float):
-        logging.info(f"Clicked on card: {item}")
+        # Check if click landed on the play button area
+        if collection_play_btn and collection_play_btn.get_opacity() > 0.5:
+            from gi.repository import Graphene  # type: ignore
 
-        from lib.state.player_state import start_play
+            point = Graphene.Point()
+            point.x = x
+            point.y = y
+            success, out_point = card.compute_point(collection_play_btn, point)
+            if success:
+                bw = collection_play_btn.get_width()
+                bh = collection_play_btn.get_height()
+                if 0 <= out_point.x <= bw and 0 <= out_point.y <= bh:
+                    playlist_id = item.audio_playlist_id or item.playlist_id
+                    if playlist_id:
+                        logging.info(
+                            f"Quick-playing collection: {item.title} ({playlist_id})"
+                        )
+                        start_play(state=player_state, playlist_id=playlist_id)
+                    return
+
+        logging.info(f"Clicked on card: {item}")
 
         def is_current_playing():
             return (
