@@ -37,6 +37,10 @@ class YTMusicWindow(Adw.ApplicationWindow):
         self.set_content(self.window_stack)
 
         # 2. Add a Loading View (The Placeholder)
+        loading_toolbar = Adw.ToolbarView()
+        loading_header = Adw.HeaderBar()
+        loading_toolbar.add_top_bar(loading_header)
+
         loading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         loading_box.set_valign(Gtk.Align.CENTER)
 
@@ -48,15 +52,10 @@ class YTMusicWindow(Adw.ApplicationWindow):
 
         loading_box.append(spinner)
         loading_box.append(loading_label)
-        self.window_stack.add_named(loading_box, "loading")
 
-        # 3. Subscribe to the Client Observable
-        # client_obs.pipe(take(1)).subscribe(
-        #     on_next=lambda client: (GLib.idle_add(self._setup_main_ui, client), None)[1]
-        # )
-        # client_obs.subscribe(
-        #     on_next=lambda client: (GLib.idle_add(self._setup_main_ui, client), None)[1]
-        # )
+        loading_toolbar.set_content(loading_box)
+        self.window_stack.add_named(loading_toolbar, "loading")
+
         def on_client_received(client: Optional[YTClient]):
             if client:
                 logging.info("YTClient received in window. Setting up main UI.")
