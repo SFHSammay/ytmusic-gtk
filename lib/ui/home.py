@@ -223,23 +223,33 @@ def HomeItemCard(
             elif player_state.state.value == PlayState.LOADING:
                 return
 
-        if item.playlist_id:
-            logging.info(f"Opening detail page for playlist {item.playlist_id}")
-            from lib.ui.collection_detail import CollectionDetailPage
-
-            detail_page = CollectionDetailPage(
-                item.playlist_id, "playlist", player_state, yt
-            )
-            nav_view.push(detail_page)
-            return
-
-        if not item.video_id:
+        if item.video_id:
+            if item.playlist_id:
+                logging.info(f"Playing song with playlist: {item.title}")
+                start_play(
+                    state=player_state,
+                    playlist_id=item.playlist_id,
+                    video_id=item.video_id,
+                )
+                return
+        else:
+            # No video_id — this is a collection (album, playlist, etc.)
             if item.browse_id and item.browse_id.startswith("MPRE"):
                 logging.info(f"Opening detail page for album {item.browse_id}")
                 from lib.ui.collection_detail import CollectionDetailPage
 
                 detail_page = CollectionDetailPage(
                     item.browse_id, "album", player_state, yt
+                )
+                nav_view.push(detail_page)
+                return
+
+            if item.playlist_id:
+                logging.info(f"Opening detail page for playlist {item.playlist_id}")
+                from lib.ui.collection_detail import CollectionDetailPage
+
+                detail_page = CollectionDetailPage(
+                    item.playlist_id, "playlist", player_state, yt
                 )
                 nav_view.push(detail_page)
                 return
@@ -369,21 +379,15 @@ def HomeRow(
 def HomePage(
     yt_subject: BehaviorSubject[Optional[ytmusicapi.YTMusic]],
     player_state: PlayerState,
-) -> Adw.NavigationView:
+    nav_view: Adw.NavigationView,
+) -> Gtk.ScrolledWindow:
     """
     Builds the Home page UI, which consists of multiple sections (e.g. "Recently Played", "Recommended Mixes").
     Each section is rendered as a HomeRow with a header and a horizontal carousel of HomeItemCards.
     The page also implements infinite scrolling by listening to the scroll position and fetching more data when the user reaches the bottom.
     """
-    nav_view = Adw.NavigationView()
-
-    # Wrap the scrolled window in a NavigationPage
-    home_page = Adw.NavigationPage(title="Home")
-    nav_view.add(home_page)
-
     scrolled = Gtk.ScrolledWindow()
     scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-    home_page.set_child(scrolled)
 
     # 1. THE CLAMP: This makes the UI look premium on widescreen monitors
     clamp = Adw.Clamp()
@@ -572,4 +576,4 @@ def HomePage(
 
     yt_subject.subscribe(on_next=on_yt_changed, on_error=on_rx_error)
 
-    return nav_view
+    return scrolled

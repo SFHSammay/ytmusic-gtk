@@ -45,6 +45,18 @@ class YTMusicWindow(Adw.ApplicationWindow):
         # The PlayBar is securely fastened to the bottom of the window
         root_toolbar_view.add_bottom_bar(PlayBar(self.player_state, show_now_playing))
 
+        # NavigationView sits above the play bar, below the window chrome
+        self.nav_view = Adw.NavigationView()
+        root_toolbar_view.set_content(self.nav_view)
+
+        # Root navigation page holds the header + main content
+        root_nav_page = Adw.NavigationPage(title="YT Music")
+        self.nav_view.add(root_nav_page)
+
+        # Inner toolbar holds the global header bar and the main stack
+        inner_toolbar_view = Adw.ToolbarView()
+        root_nav_page.set_child(inner_toolbar_view)
+
         # The animated stack (Slides up/down between Main and Now Playing)
         self.main_stack = Gtk.Stack()
 
@@ -52,12 +64,11 @@ class YTMusicWindow(Adw.ApplicationWindow):
         self.main_stack.set_transition_type(Gtk.StackTransitionType.OVER_UP_DOWN)
         self.main_stack.set_transition_duration(350)  # 350ms smooth transition
 
-        # Set the stack as the content ABOVE the PlayBar
-        root_toolbar_view.set_content(self.main_stack)
+        inner_toolbar_view.set_content(self.main_stack)
 
-        # Global HeaderBar
+        # Global HeaderBar (on inner_toolbar_view so pushed pages cover it)
         self.header = Adw.HeaderBar()
-        root_toolbar_view.add_top_bar(self.header)
+        inner_toolbar_view.add_top_bar(self.header)
 
         # Stack for center title widget
         self.title_stack = Gtk.Stack()
@@ -114,10 +125,16 @@ class YTMusicWindow(Adw.ApplicationWindow):
         # Add pages to your ViewStack
         main_toolbar_view.set_content(self.view_stack)
         self.view_stack.add_titled_with_icon(
-            HomePage(yt_subject, self.player_state), "home", "Home", "go-home-symbolic"
+            HomePage(yt_subject, self.player_state, self.nav_view),
+            "home",
+            "Home",
+            "go-home-symbolic",
         )
         self.view_stack.add_titled_with_icon(
-            ExplorePage(yt_subject), "explore", "Explore", "compass2-symbolic"
+            ExplorePage(yt_subject, self.nav_view),
+            "explore",
+            "Explore",
+            "compass2-symbolic",
         )
         self.view_stack.add_titled_with_icon(
             Gtk.Label(label="Library Coming Soon!"),

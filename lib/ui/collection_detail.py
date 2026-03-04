@@ -257,12 +257,13 @@ def CollectionDetailPage(
             GLib.idle_add(build_detail_ui, album)
         except Exception as e:
             logging.error(f"Failed to fetch {item_type} {item_id}: {e}")
+            error_msg = str(e)
 
             def show_error() -> bool:
                 error_page = Adw.StatusPage()
                 error_page.set_icon_name("dialog-error-symbolic")
                 error_page.set_title(f"Failed to load {item_type}")
-                error_page.set_description(str(e))
+                error_page.set_description(error_msg)
                 content_stack.add_named(error_page, "error")
                 content_stack.set_visible_child_name("error")
                 return GLib.SOURCE_REMOVE

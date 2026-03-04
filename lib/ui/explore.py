@@ -396,6 +396,7 @@ def MoodsAndGenresBadges(moods: List[MoodAndGenre]) -> Gtk.Box:
 
 def ExplorePage(
     yt_subject: BehaviorSubject[Optional[ytmusicapi.YTMusic]],
+    nav_view: Adw.NavigationView,
 ) -> Gtk.ScrolledWindow:
     scrolled = Gtk.ScrolledWindow()
     scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
