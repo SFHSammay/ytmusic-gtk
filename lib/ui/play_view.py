@@ -1,11 +1,12 @@
-from lib.ui.thumbnail import ThumbnailWidget, ThumbnailWidgetFromUrl
+from lib.ui.thumbnail import ThumbnailWidget, ThumbnailWidgetFromUrl, Thumbnail
 from typing import Optional
 from lib.state.player_state import MediaStatus
 from reactivex.subject import BehaviorSubject
 from lib.ui.play_bar import PlayerState
 from lib.state.player_state import PlayState
 from gi.repository import Gtk, Adw, GLib, GObject, Pango
-
+from reactivex import operators as ops
+import reactivex as rx
 
 def NowPlayingView(
     state: PlayerState,
@@ -33,14 +34,13 @@ def NowPlayingView(
     left_pane.set_margin_end(32)
 
     # Large album art — fed by a reactive stream from state.current
-    from reactivex import operators as ops
-    import reactivex as rx
+
 
     art_thumbnails_stream = state.current.pipe(
         ops.map(
             lambda c: (
                 [
-                    __import__("lib.data", fromlist=["Thumbnail"]).Thumbnail(
+                    Thumbnail(
                         url=c.album_art
                     )
                 ]
@@ -221,8 +221,6 @@ def NowPlayingView(
             row.set_title_lines(1)
             row.set_subtitle_lines(1)
             row.set_activatable(True)
-            # row.set_margin_top(4)
-            # row.set_margin_bottom(4)
 
             thumb = ThumbnailWidgetFromUrl(rx.of(media.album_art or None))
             thumb.set_size_request(48, 48)
