@@ -1,3 +1,4 @@
+from lib.net.yt_client import YTClient
 from lib.data import AlbumData, AlbumTrack
 from lib.ui.thumbnail import ThumbnailWidget
 from lib.ui.play_bar import PlayerState
@@ -14,7 +15,7 @@ def CollectionDetailPage(
     item_id: str,
     item_type: Literal["album", "playlist"],
     player_state: PlayerState,
-    yt: ytmusicapi.YTMusic,
+    yt: YTClient,
 ) -> Adw.NavigationPage:
     """
     Creates a detail page for an album/single/EP that slides in from the right.

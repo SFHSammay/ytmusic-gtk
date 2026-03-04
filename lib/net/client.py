@@ -1,3 +1,4 @@
+from lib.net.yt_client import YTClient
 from lib.data import AccountInfo
 from pycookiecheat import firefox_cookies, chrome_cookies
 import ytmusicapi
@@ -97,6 +98,11 @@ def auto_login(force_refresh: bool = False) -> Optional[ytmusicapi.YTMusic]:
         logging.info("Verifying authentication...")
         account = AccountInfo.model_validate(yt.get_account_info())
         logging.info(f"Logged in as: {account.account_name} ({account.channel_handle})")
+
+        ytc = YTClient(yt)
+        ytc.get_account_info(blocking=True).subscribe(
+            lambda info: logging.info(f"Account info verified via YTClient: {info[0].account_name}")
+        )
 
         playlists = yt.get_library_playlists(limit=1)
         if not playlists:

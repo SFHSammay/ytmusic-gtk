@@ -1,3 +1,4 @@
+from lib.net.yt_client import YTClient
 from lib.state.player_state import LikeStatus, start_play
 from lib.state.player_state import MediaStatus
 from lib.ui.thumbnail import ThumbnailWidget
@@ -52,7 +53,7 @@ HomePageType = List[HomeSectionData]
 def HomeItemCard(
     item: HomeItemData,
     player_state: PlayerState,
-    yt: ytmusicapi.YTMusic,
+    client: YTClient,
     nav_view: Adw.NavigationView,
 ) -> Gtk.Box:
     """
@@ -317,7 +318,7 @@ def HomeItemCard(
                 from lib.ui.collection_detail import CollectionDetailPage
 
                 detail_page = CollectionDetailPage(
-                    item.playlist_id, "playlist", player_state, yt
+                    item.playlist_id, "playlist", player_state, client
                 )
                 nav_view.push(detail_page)
                 return
