@@ -100,8 +100,10 @@ def auto_login(force_refresh: bool = False) -> Optional[ytmusicapi.YTMusic]:
         logging.info(f"Logged in as: {account.account_name} ({account.channel_handle})")
 
         ytc = YTClient(yt)
-        ytc.get_account_info(blocking=True).subscribe(
-            lambda info: logging.info(f"Account info verified via YTClient: {info[0].account_name}")
+        yt_client_account_info = ytc.get_account_info(blocking=True)
+        yt_client_account_info.subscribe(
+            on_next=lambda x: logging.info(f"Account info from YTClient: {x}"),
+            on_error=lambda e: logging.error(f"Error fetching account info: {e}"),
         )
 
         playlists = yt.get_library_playlists(limit=1)

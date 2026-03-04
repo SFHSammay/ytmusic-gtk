@@ -1,3 +1,5 @@
+from lib.data import LikeStatus
+from lib.net.yt_client import YTClient
 from typing import Any
 from typing import cast
 from lib.sys.env import CACHE_DIR
@@ -31,9 +33,6 @@ class RepeatMode(enum.Enum):
     OFF = 0
     ALL = 1
     ONE = 2
-
-
-LikeStatus = Literal["INDIFFERENT", "LIKE", "DISLIKE"]
 
 
 @dataclass
@@ -84,8 +83,8 @@ class CurrentPlaylist:
 class PlayerState:
     """Holds all reactive state and playing logic for the app."""
 
-    yt: BehaviorSubject[Optional["ytmusicapi.YTMusic"]] = field(
-        default_factory=lambda: BehaviorSubject[Optional[ytmusicapi.YTMusic]](None)
+    yt: BehaviorSubject[Optional[YTClient]] = field(
+        default_factory=lambda: BehaviorSubject[Optional[YTClient]](None)
     )
     state: BehaviorSubject[PlayState] = field(
         default_factory=lambda: BehaviorSubject(PlayState.EMPTY)
@@ -212,10 +211,10 @@ def start_play(
 
             if playlist_id and not playlist_id.startswith("RD"):
                 logging.info(f"Fetching playlist details for {playlist_id}")
-                raw_playlist = yt.get_watch_playlist(playlistId=playlist_id)
+                raw_playlist = yt.get_watch_playlist(playlist_id)
             elif video_id:
                 logging.info(f"Fetching song details for {video_id}")
-                raw_playlist = yt.get_watch_playlist(videoId=video_id)
+                raw_playlist = yt.get_watch_playlist(video_id)
             if not raw_playlist:
                 logging.warning("No additional details found for this item.")
                 return
@@ -249,10 +248,16 @@ def start_play(
             first_song = media_list[0]
             if not yt:
                 return
-            audio_file = get_audio_file(yt, first_song.id)
-            logging.info(f"Audio file: {audio_file}")
+            # audio_file = get_audio_file(yt, first_song.id)
+            audio_file = yt.get_audio_file(first_song.id)
+            # logging.info(f"Audio file: {audio_file}")
 
-            first_song.audio_file.on_next(audio_file)
+            # first_song.audio_file.on_next(audio_file)
+            audio_file.subscribe(
+                on_next=lambda x: first_song.audio_file.on_next(
+                    x[0].path if x else None
+                )
+            )
             # Update media list
             state.playlist.media.on_next(media_list)
             state.playlist.index.on_next(0)
@@ -451,10 +456,12 @@ def setup_player(state: PlayerState) -> Gst.Element:
                 if not yt_instance or not current:
                     return
                 try:
-                    audio_file = get_audio_file(yt_instance, current_id)
-                    cur_audio = current.audio_file
-                    if cur_audio:
-                        cur_audio.on_next(audio_file)
+                    audio_file = yt_instance.get_audio_file(current_id)
+                    audio_file.subscribe(
+                        on_next=lambda x: current.audio_file.on_next(
+                            x[0].path if x else None
+                        )
+                    )
                     state.state.on_next(PlayState.PLAYING)
                 except Exception as e:
                     logging.error(f"Could not fetch audio for {current_id}: {e}")

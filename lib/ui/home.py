@@ -308,7 +308,7 @@ def HomeItemCard(
                 from lib.ui.collection_detail import CollectionDetailPage
 
                 detail_page = CollectionDetailPage(
-                    item.browse_id, "album", player_state, yt
+                    item.browse_id, "album", player_state, client
                 )
                 nav_view.push(detail_page)
                 return
@@ -404,7 +404,7 @@ def HomeItemCard(
 def HomeRow(
     section: HomeSectionData,
     player_state: PlayerState,
-    yt: ytmusicapi.YTMusic,
+    client: YTClient,
     nav_view: Adw.NavigationView,
 ) -> tuple[Gtk.Box, Gtk.Box]:
     """
@@ -436,7 +436,7 @@ def HomeRow(
     row_box.set_margin_bottom(8)  # Prevents horizontal scrollbar from overlapping text
 
     for item in section.contents:
-        row_box.append(HomeItemCard(item, player_state, yt, nav_view))
+        row_box.append(HomeItemCard(item, player_state, client, nav_view))
 
     scrolled.set_child(row_box)
     box.append(scrolled)
@@ -446,7 +446,7 @@ def HomeRow(
 
 
 def HomePage(
-    yt_subject: BehaviorSubject[Optional[ytmusicapi.YTMusic]],
+    yt_subject: BehaviorSubject[Optional[YTClient]],
     player_state: PlayerState,
     nav_view: Adw.NavigationView,
 ) -> Gtk.ScrolledWindow:
@@ -491,13 +491,13 @@ def HomePage(
     # current_yt_instance = BehaviorSubject[Optional[ytmusicapi.YTMusic]](None)
     row_cache = {}
 
-    home_page_subject = BehaviorSubject[
-        Tuple[HomePageType, bool, Optional[ytmusicapi.YTMusic]]
-    ](([], True, None))
+    home_page_subject = BehaviorSubject[Tuple[HomePageType, bool, Optional[YTClient]]](
+        ([], True, None)
+    )
     scroll_subject = Subject()
 
     def update_ui(
-        home: HomePageType, is_reset: bool, yt: Optional[ytmusicapi.YTMusic]
+        home: HomePageType, is_reset: bool, client: Optional[YTClient]
     ) -> bool:
 
         if is_reset:
@@ -507,7 +507,7 @@ def HomePage(
             has_more.on_next(True)
 
         # Beautiful Native Loading State
-        if not yt:
+        if not client:
             loading_page = Adw.StatusPage()
             loading_page.set_title("Waking up the music...")
             loading_page.set_description("Connecting to your library")
@@ -542,14 +542,16 @@ def HomePage(
                 if len(section.contents) > current_count:
                     new_items = section.contents[current_count:]
                     for item in new_items:
-                        carousel.append(HomeItemCard(item, player_state, yt, nav_view))
+                        carousel.append(
+                            HomeItemCard(item, player_state, client, nav_view)
+                        )
                     row_cache[section.title] = (
                         section_box,
                         carousel,
                         len(section.contents),
                     )
             else:
-                section_box, carousel = HomeRow(section, player_state, yt, nav_view)
+                section_box, carousel = HomeRow(section, player_state, client, nav_view)
                 home_box.append(section_box)
                 row_cache[section.title] = (
                     section_box,
@@ -567,11 +569,11 @@ def HomePage(
 
     # --- RX CALLBACKS (No lambdas) ---
     def on_home_data_next(
-        data_tuple: Tuple[HomePageType, bool, Optional[ytmusicapi.YTMusic]],
+        data_tuple: Tuple[HomePageType, bool, Optional[YTClient]],
     ):
-        home_data, is_reset, yt = data_tuple
+        home_data, is_reset, client = data_tuple
         # Pass arguments explicitly to avoid lambda wrapping
-        GLib.idle_add(update_ui, home_data, is_reset, yt)
+        GLib.idle_add(update_ui, home_data, is_reset, client)
 
     def on_rx_error(e):
         logging.error(f"Rx Error: {e}")
@@ -582,9 +584,9 @@ def HomePage(
     )
 
     # --- BACKGROUND FETCH LOGIC ---
-    def fetch_home_data(yt: ytmusicapi.YTMusic, limit: int, is_reset: bool):
+    def fetch_home_data(client: YTClient, limit: int, is_reset: bool):
         try:
-            raw_home = yt.get_home(limit=limit)
+            raw_home = client.get_home(limit=limit)
             # Write the raw response to a JSON file for debugging
             import json
 

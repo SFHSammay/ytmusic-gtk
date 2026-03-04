@@ -1,3 +1,4 @@
+from lib.net.yt_client import YTClient
 from typing import Optional
 from lib.ui.about import show_about_window
 import ytmusicapi
@@ -106,7 +107,7 @@ class YTMusicApp(Adw.Application):
             self.win.set_visible(True)
             self.win.present()
             return
-        self.yt_subject = BehaviorSubject[ytmusicapi.YTMusic | None](None)
+        self.yt_subject = BehaviorSubject[YTClient | None](None)
         self.win = YTMusicWindow(application=app, yt_subject=self.yt_subject)
         self.win.present()
 

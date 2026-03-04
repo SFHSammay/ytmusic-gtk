@@ -1,3 +1,4 @@
+from lib.net.yt_client import YTClient
 import ytmusicapi
 from typing import Optional
 import threading
@@ -25,7 +26,7 @@ from lib.net.client import auto_login
 class YTMusicWindow(Adw.ApplicationWindow):
 
     def __init__(
-        self, yt_subject: BehaviorSubject[Optional[ytmusicapi.YTMusic]], **kwargs
+        self, yt_subject: BehaviorSubject[Optional[YTClient]], **kwargs
     ):
         super().__init__(**kwargs)
         logging.info("Initializing YT Music App UI...")

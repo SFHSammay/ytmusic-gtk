@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
 
+LikeStatus = Literal["INDIFFERENT", "LIKE", "DISLIKE"]
+
 class AccountInfo(BaseModel):
     # Field aliases map the JSON key to your Python variable
     account_name: str = Field(alias="accountName")
@@ -45,7 +47,7 @@ class BaseMedia(BaseModel):
     thumbnails: Optional[list[Thumbnail]] = Field(None, alias="thumbnails")
 
     # Common fields across various media types
-    like_status: Optional[Literal["LIKE", "DISLIKE", "INDIFFERENT"]] = Field(None, alias="likeStatus")
+    like_status: Optional[LikeStatus] = Field(None, alias="likeStatus")
     in_library: Optional[bool] = Field(None, alias="inLibrary")
     video_type: Optional[str] = Field(None, alias="videoType")
     is_explicit: bool = Field(False, alias="isExplicit")
