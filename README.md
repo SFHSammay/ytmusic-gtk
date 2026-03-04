@@ -1,8 +1,8 @@
 # YT Music GTK
 
-Yet another Desktop YouTube Music client
+![](./assets/icons/com.example.YTMusicApp.svg)
 
-Built with GTK4 and LibAdwaita.
+A Desktop YouTube Music client in GTK4.
 
 > [!WARNING]  
 > This project is currently HIGHLY experimental!
@@ -22,6 +22,9 @@ Built with GTK4 and LibAdwaita.
 - Playback (partial)
 - Home Page (partial)
 - Like/dislike
+
+
+
 
 
 
