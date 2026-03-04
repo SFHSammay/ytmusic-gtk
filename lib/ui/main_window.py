@@ -160,7 +160,7 @@ class YTMusicWindow(Adw.ApplicationWindow):
             "go-home-symbolic",
         )
         self.view_stack.add_titled_with_icon(
-            Gtk.Label(label="Library Coming Soon!"),
+            Gtk.Label(label="Explore Coming Soon!"),
             "explore",
             "Explore",
             "compass2-symbolic",

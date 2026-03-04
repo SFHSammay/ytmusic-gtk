@@ -8,6 +8,7 @@ from gi.repository import Gtk, Adw, GLib, GObject, Pango
 from reactivex import operators as ops
 import reactivex as rx
 
+
 def NowPlayingView(
     state: PlayerState,
 ) -> Adw.ToolbarView:
@@ -33,18 +34,9 @@ def NowPlayingView(
 
     # Large album art — fed by a reactive stream from state.current
 
-
     art_thumbnails_stream = state.current.pipe(
         ops.map(
-            lambda c: (
-                [
-                    Thumbnail(
-                        url=c.album_art
-                    )
-                ]
-                if c and c.album_art
-                else None
-            )
+            lambda c: ([Thumbnail(url=c.album_art)] if c and c.album_art else None)
         ),
     )
     art_widget = ThumbnailWidget(art_thumbnails_stream)

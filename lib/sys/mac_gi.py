@@ -3,6 +3,7 @@ def mac_brew_fix():
         import subprocess
         import os
         import sys
+
         brew_prefix = subprocess.check_output(["brew", "--prefix"], text=True).strip()
         brew_lib_path = f"{brew_prefix}/lib"
 
@@ -14,4 +15,3 @@ def mac_brew_fix():
             os.execv(sys.executable, [sys.executable] + sys.argv)
     except Exception as e:
         print(f"Warning: Could not configure Homebrew paths automatically: {e}")
-

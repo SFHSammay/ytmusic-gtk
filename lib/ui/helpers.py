@@ -1,7 +1,8 @@
-
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from gi.repository import Gtk
+
 
 def toggle_css(widget: "Gtk.Widget", class_name: str, active: bool) -> None:
     if active:
@@ -10,7 +11,9 @@ def toggle_css(widget: "Gtk.Widget", class_name: str, active: bool) -> None:
         widget.remove_css_class(class_name)
 
 
-def toggle_icon(widget: "Gtk.Button", active: bool, on_icon: str, off_icon: str) -> None:
+def toggle_icon(
+    widget: "Gtk.Button", active: bool, on_icon: str, off_icon: str
+) -> None:
     widget.set_icon_name(on_icon if active else off_icon)
 
 
@@ -28,6 +31,7 @@ def format_time(ns: int) -> str:
     else:
         return f"{minutes}:{secs:02d}"
 
+
 def format_time_to_seconds(time_str: str) -> int:
     if time_str == "N/A":
         return 0
@@ -42,7 +46,6 @@ def format_time_to_seconds(time_str: str) -> int:
     if len(parts) >= 3:
         hours = int(parts[-3])
     return hours * 3600 + minutes * 60 + seconds
-
 
 
 # Unit test

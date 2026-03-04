@@ -278,7 +278,7 @@ class TestYtMusicDataParsing(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from lib.net.client import auto_login
+        from lib.net.api import auto_login
 
         yt = auto_login()
         if yt is None:
