@@ -1,4 +1,4 @@
-from lib.state.player_state import LikeStatus
+from lib.state.player_state import LikeStatus, start_play
 from lib.state.player_state import MediaStatus
 from lib.ui.thumbnail import ThumbnailWidget
 from reactivex import Subject
@@ -192,7 +192,31 @@ def HomeItemCard(
     text_box.append(title_lbl)
     text_box.append(subtitle_lbl)
 
-    card.append(overlay)  # Append the overlay here instead of 'img'
+    # Add a small play button on the bottom-right for collection items
+    is_collection = not item.video_id
+    if is_collection:
+        collection_play_btn = Gtk.Button(icon_name="media-playback-start-symbolic")
+        collection_play_btn.add_css_class("suggested-action")
+        collection_play_btn.add_css_class("circular")
+        collection_play_btn.set_size_request(36, 36)
+        collection_play_btn.set_halign(Gtk.Align.END)
+        collection_play_btn.set_valign(Gtk.Align.END)
+        collection_play_btn.set_margin_end(8)
+        collection_play_btn.set_margin_bottom(8)
+        collection_play_btn.set_tooltip_text("Play")
+
+        def on_collection_play(_btn: Gtk.Button) -> None:
+            playlist_id = item.audio_playlist_id or item.playlist_id
+            if not playlist_id:
+                logging.warning(f"Collection {item.title} has no playlist ID to play.")
+                return
+            logging.info(f"Quick-playing collection: {item.title} ({playlist_id})")
+            start_play(state=player_state, playlist_id=playlist_id)
+
+        collection_play_btn.connect("clicked", on_collection_play)
+        overlay.add_overlay(collection_play_btn)
+
+    card.append(overlay)
     card.append(text_box)
 
     click = Gtk.GestureClick.new()

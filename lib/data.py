@@ -24,7 +24,7 @@ class Thumbnail(BaseModel):
 
 class Album(BaseModel):
     name: str
-    id: str
+    id: Optional[str] = None
 
 
 class PodcastInfo(BaseModel):

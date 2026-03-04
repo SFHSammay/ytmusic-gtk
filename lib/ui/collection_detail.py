@@ -152,11 +152,12 @@ def CollectionDetailPage(
         play_btn.set_size_request(56, 56)
 
         def on_play_clicked(_btn: Gtk.Button) -> None:
-            if not album.audio_playlist_id:
-                logging.warning("Album has no audioPlaylistId, cannot play.")
+            playlist_id = album.audio_playlist_id or album.id
+            if not playlist_id:
+                logging.warning("Collection has no playlist ID, cannot play.")
                 return
-            logging.info(f"Playing album: {album.title} ({album.audio_playlist_id})")
-            start_play(state=player_state, playlist_id=album.audio_playlist_id)
+            logging.info(f"Playing collection: {album.title} ({playlist_id})")
+            start_play(state=player_state, playlist_id=playlist_id)
 
         play_btn.connect("clicked", on_play_clicked)
         btn_box.append(play_btn)
@@ -230,7 +231,7 @@ def CollectionDetailPage(
 
                 row.connect(
                     "activated",
-                    make_track_handler(vid, album.audio_playlist_id),
+                    make_track_handler(vid, album.audio_playlist_id or album.id),
                 )
 
             track_list.append(row)
