@@ -1,4 +1,3 @@
-from lib.net.yt_client import YTClient
 import ytmusicapi
 from typing import Optional
 import threading
@@ -26,7 +25,7 @@ from lib.net.client import auto_login
 class YTMusicWindow(Adw.ApplicationWindow):
 
     def __init__(
-        self, yt_subject: BehaviorSubject[Optional[YTClient]], **kwargs
+        self, yt_subject: BehaviorSubject[Optional[ytmusicapi.YTMusic]], **kwargs
     ):
         super().__init__(**kwargs)
         logging.info("Initializing YT Music App UI...")
@@ -159,6 +158,7 @@ class YTMusicWindow(Adw.ApplicationWindow):
                 self.title_stack.set_visible_child_name(target)
                 self.start_stack.set_visible_child_name(target)
                 self.end_stack.set_visible_child_name(target)
+
             GLib.idle_add(_update)
 
         show_now_playing.subscribe(on_nav_state_changed)

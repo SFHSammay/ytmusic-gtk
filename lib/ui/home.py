@@ -562,7 +562,7 @@ def HomePage(
         bottom_spinner_box.set_visible(False)
         is_loading.on_next(False)
 
-        if yt and len(home) < current_limit.value:
+        if client and len(home) < current_limit.value:
             has_more.on_next(False)
 
         return GLib.SOURCE_REMOVE
@@ -593,13 +593,13 @@ def HomePage(
             with open("debug_home_response.json", "w") as f:
                 json.dump(raw_home, f, indent=4)
             home_data = HomePageTypeAdapter.validate_python(raw_home)
-            home_page_subject.on_next((home_data, is_reset, yt))
+            home_page_subject.on_next((home_data, is_reset, client))
         except Exception as e:
             logging.error(f"Failed to fetch home data: {e}")
             if is_reset:
                 home_page_subject.on_next(([], is_reset, None))
             else:
-                home_page_subject.on_next(([], False, yt))
+                home_page_subject.on_next(([], False, client))
 
     def trigger_load_more(dummy_value=None):
         if is_loading.value:
@@ -632,8 +632,8 @@ def HomePage(
         on_next=trigger_load_more, on_error=on_rx_error
     )
 
-    def on_yt_changed(yt: Optional[ytmusicapi.YTMusic]):
-        if yt is None:
+    def on_yt_changed(client: Optional[YTClient]) -> None:
+        if client is None:
             logging.info("YT Music instance is None, showing error message.")
             return
 
@@ -642,7 +642,9 @@ def HomePage(
 
         # FIXED: Added the explicit `True` argument for `is_reset`
         threading.Thread(
-            target=fetch_home_data, args=(yt, current_limit.value, True), daemon=True
+            target=fetch_home_data,
+            args=(client, current_limit.value, True),
+            daemon=True,
         ).start()
 
     yt_subject.subscribe(on_next=on_yt_changed, on_error=on_rx_error)

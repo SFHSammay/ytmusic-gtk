@@ -19,32 +19,38 @@ from lib.data import AlbumData, AccountInfo, SongDetail
 
 thread_pool_scheduler = ThreadPoolScheduler(max_workers=multiprocessing.cpu_count())
 
-# 1. Bind T to BaseModel (as discussed)
-T = TypeVar("T", bound=BaseModel)
-
-# 2. Define P to capture the arguments of the decorated function
+T = TypeVar("T")
 P = ParamSpec("P")
 
+HomePageTypeAdapter = TypeAdapter(list[HomeSectionData])
 
 def rx_fetch(
-    model_class: type[T],
-) -> Callable[[Callable[P, Any]], Callable[P, Observable[Optional[tuple[T, dict]]]]]:
+    parser: type[T] | TypeAdapter[T],
+) -> Callable[[Callable[P, Any]], Callable[P, Observable[Optional[tuple[T, Any]]]]]:
+
+    # 1. Normalize the parser into a TypeAdapter immediately.
+    # If it's already a TypeAdapter (like HomePageTypeAdapter), keep it.
+    # If it's a model class (like SongDetail), wrap it in a TypeAdapter.
+    adapter = parser if isinstance(parser, TypeAdapter) else TypeAdapter(parser)
 
     def decorator(
         func: Callable[P, Any],
-    ) -> Callable[P, Observable[Optional[tuple[T, dict]]]]:
+    ) -> Callable[P, Observable[Optional[tuple[T, Any]]]]:
         @wraps(func)
         def wrapper(
             *args: P.args, **kwargs: P.kwargs
-        ) -> Observable[Optional[tuple[T, dict]]]:
-            # Extract blocking safely
+        ) -> Observable[Optional[tuple[T, Any]]]:
             blocking = cast(bool, kwargs.pop("blocking", False))
 
-            def fetch_work() -> Optional[tuple[T, dict]]:
-                raw_dict = func(*args, **kwargs)
-                if not raw_dict:
+            def fetch_work() -> Optional[tuple[T, Any]]:
+                raw_data = func(*args, **kwargs)
+                if not raw_data:
                     return None
-                return (model_class.model_validate(raw_dict), raw_dict)
+                
+                # 2. Because `adapter` is strictly a TypeAdapter now, 
+                # we just use `.validate_python()`. The type checker is happy!
+                parsed_model = adapter.validate_python(raw_data)
+                return (parsed_model, raw_data)
 
             observable = rx.from_callable(fetch_work)
 
@@ -53,13 +59,12 @@ def rx_fetch(
 
             return observable.pipe(
                 operators.subscribe_on(thread_pool_scheduler),
-                operators.start_with(cast(Optional[tuple[T, dict]], None)),
+                operators.start_with(cast(Optional[tuple[T, Any]], None)),
             )
 
         return wrapper
 
     return decorator
-
 
 class YTClient:
     def __init__(self, yt: ytmusicapi.YTMusic):
@@ -113,13 +118,21 @@ class YTClient:
         return LocalAudio(path=path)
 
     @rx_fetch(HomePageTypeAdapter)
-    def get_home(self, limit: int = 100, *, blocking: bool = False) -> Optional[dict]:
+    def get_home(self, limit: int = 100, *, blocking: bool = False) -> Optional[list]:
         return self.yt.get_home(limit=limit)
 
+    @rx_fetch(AlbumData)
+    def get_album(
+        self,
+        browse_id: str,
+        *,
+        blocking: bool = False,
+    ) -> Optional[dict]:
+        return self.yt.get_album(browse_id)
 
 class LocalAudio(BaseModel):
     path: pathlib.Path
 
 
-# Get type of HomePage for type hinting
-HomePageType = list[HomeSectionData]
+# # Get type of HomePage for type hinting
+# HomePageType = list[HomeSectionData]
