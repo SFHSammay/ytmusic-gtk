@@ -2,8 +2,7 @@
 
 ![](./assets/icons/com.example.YTMusicApp.svg)
 
-Yet another Desktop You![Uploading com.example.YTMusicApp.svg…]()
-Tube Music client
+Yet another Desktop YouTube Music client
 
 Built with GTK4 and LibAdwaita.
 
@@ -25,6 +24,7 @@ Built with GTK4 and LibAdwaita.
 - Playback (partial)
 - Home Page (partial)
 - Like/dislike
+
 
 
 
