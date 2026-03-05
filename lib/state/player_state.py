@@ -172,7 +172,6 @@ def start_play(
         state.playlist.media.on_next(media_list)
         state.playlist.index.on_next(0)
         state.playlist.playlist_id.on_next(watch_playlist.playlist_id)
-        state.state.on_next(PlayState.PLAYING)
 
     playlist.subscribe(
         on_next=on_playlist,
