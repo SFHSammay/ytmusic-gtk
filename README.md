@@ -39,7 +39,7 @@ uv run main.py
 ```
 
 > [!NOTE]
-> It reads cookies from Firefox or Chrome. You need to be logged in to YouTube Music in one of them.
+> It reads cookies from Firefox or Chrome directly. You need to be logged in to YouTube Music in one of them.
 >
 > This, of course, is a bit sus, so use it at your own risk.
 
