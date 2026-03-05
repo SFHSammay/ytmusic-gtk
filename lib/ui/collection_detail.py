@@ -1,3 +1,4 @@
+from lib.ui.loading import LoadingUI
 from lib.net.client import YTClient
 from lib.data import AlbumData
 from lib.ui.thumbnail import ThumbnailWidget
@@ -7,6 +8,9 @@ from typing import Optional, Literal
 import reactivex as rx
 import logging
 from gi.repository import Gtk, Adw, GLib, Pango, Gdk
+
+# Assume LoadingUI is imported here
+# from lib.ui.loading import LoadingUI
 
 
 def CollectionDetailPage(
@@ -35,22 +39,9 @@ def CollectionDetailPage(
     content_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
     toolbar.set_content(content_stack)
 
-    # Loading state
-    loading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-    loading_box.set_valign(Gtk.Align.CENTER)
-    loading_box.set_vexpand(True)
-
-    loading_page = Adw.StatusPage()
-    loading_page.set_title(f"Loading {item_type}...")
-    loading_page.set_description("Fetching track list")
-
-    spinner = Adw.Spinner()
-    spinner.set_size_request(48, 48)
-    spinner.set_halign(Gtk.Align.CENTER)
-
-    loading_box.append(loading_page)
-    loading_box.append(spinner)
-    content_stack.add_named(loading_box, "loading")
+    # --- Loading State using LoadingUI ---
+    loading_view = LoadingUI(primary_text=f"Loading {item_type}...", show_header=False)
+    content_stack.add_named(loading_view, "loading")
 
     # Content (built after fetch)
     detail_box = Gtk.Box()
