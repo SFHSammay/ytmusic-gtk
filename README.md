@@ -2,7 +2,9 @@
 
 ![](./assets/icons/com.example.YTMusicApp.svg)
 
-A Desktop YouTube Music client in GTK4.
+A cross-platform Desktop YouTube Music client in GTK4.
+
+<img width="1012" alt="mac" src="https://github.com/user-attachments/assets/7ef0acab-e0b2-48dd-a155-37dfd745eb87" />
 
 > [!WARNING]  
 > This project is currently HIGHLY experimental!
@@ -47,8 +49,6 @@ uv run main.py
 
 It is only tested on macOS and Linux.
 
-<img width="1012" alt="mac" src="https://github.com/user-attachments/assets/7ef0acab-e0b2-48dd-a155-37dfd745eb87" />
-
 ## Features
 
 - Login (partial)
@@ -56,3 +56,4 @@ It is only tested on macOS and Linux.
 - Home Page (partial)
 - Like/dislike
 - System Tray & Background Play (macOS/DBus)
+
