@@ -102,7 +102,6 @@ def rx_fetch(
 
         def _get_disk_key(resolved_args: tuple, resolved_kwargs: dict) -> str:
             """Creates a stable string for hashing, ignoring 'self' to avoid pickling errors."""
-            # Skip args[0] if it is a class instance ('self')
             safe_args = (
                 resolved_args[1:]
                 if resolved_args and hasattr(resolved_args[0], "__dict__")
@@ -209,7 +208,6 @@ def rx_fetch(
                     raise ValueError("Cannot use blocking=True with Observables.")
 
                 force_refresh = cast(bool, kwargs.get("force_refresh", False))
-                # Changed to False by default
                 cache_only = cast(bool, kwargs.get("cache_only", False))
 
                 cache_kwargs = {
@@ -237,6 +235,9 @@ def rx_fetch(
                 _set_cache(cache_key, args, kwargs, raw_data, parsed)
 
                 if not cache_only and has_valid_cache:
+                    # NEW: Drop duplicate synchronous emissions
+                    if cached_val == parsed:
+                        return rx.just(cached_val)
                     return rx.of(cached_val, parsed)
 
                 return rx.just(parsed)
@@ -267,7 +268,6 @@ def rx_fetch(
                     resolved_args, resolved_kwargs = (), {}
 
                 force_refresh = cast(bool, resolved_kwargs.get("force_refresh", False))
-                # Changed to False by default
                 cache_only = cast(bool, resolved_kwargs.get("cache_only", False))
 
                 cache_kwargs = {
@@ -309,7 +309,10 @@ def rx_fetch(
                 )
 
                 if not cache_only and has_valid_cache:
-                    return rx.concat(rx.just(cached_val), fetch_obs)
+                    # NEW: concat them, then filter out identical consecutive values
+                    return rx.concat(rx.just(cached_val), fetch_obs).pipe(
+                        operators.distinct_until_changed()
+                    )
 
                 return fetch_obs
 
