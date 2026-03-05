@@ -1,8 +1,12 @@
 # YT Music GTK
 
-![icon](./assets/app/com.yamadasexta.YTMusicApp.svg)
+<p align="center">
+    <img src="./assets/app/com.yamadasexta.YTMusicApp.svg" width="128" height="128">
+</p>
 
 A cross-platform Desktop YouTube Music client in GTK4.
+
+---
 
 <img width="1012" alt="mac" src="https://github.com/user-attachments/assets/7ef0acab-e0b2-48dd-a155-37dfd745eb87" />
 
