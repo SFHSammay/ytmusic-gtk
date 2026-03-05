@@ -1,3 +1,5 @@
+import sys
+import threading
 from lib.data import SongDetail
 import logging
 from lib.data import AlbumData
@@ -18,6 +20,7 @@ from gi.repository import GLib, Gst, GstApp
 from reactivex.subject import BehaviorSubject, Subject
 from reactivex import operators as ops
 import reactivex as rx
+import mpv
 
 
 # Enum for the player state
@@ -243,169 +246,90 @@ def play_previous(state: PlayerState) -> None:
     state.playlist.index.on_next(next_idx)
 
 
-def setup_player(state: PlayerState) -> Gst.Element:
+def setup_player(state: PlayerState) -> mpv.MPV:
     """
-    Initializes the GStreamer player and MPRIS controller, binding them to
+    Initializes the MPV player and binds it to
     the given PlayerState via functional reactive streams.
     """
-    if not Gst.is_initialized():
-        Gst.init(None)
+    import locale
 
-    import typing
+    locale.setlocale(locale.LC_NUMERIC, "C")
+    # Initialize MPV for background audio only
+    player = mpv.MPV(ytdl=False, video=False)
 
-    player = typing.cast(Gst.Element, Gst.ElementFactory.make("playbin", "player"))
-    if not player:
-        logging.error("Failed to create GStreamer playbin element.")
-        raise RuntimeError("GStreamer initialization failed")
-
-    flags = player.get_property("flags")
-    # Disable video output since this is an audio player
-    flags &= ~(1 << 0)
-    player.set_property("flags", flags)
-    # Allow loading the entire music into the RAM (Max 256MB)
-    player.set_property("ring-buffer-max-size", 256 * 1024 * 1024)
-
-    class MemoryPlayerState:
-        def __init__(self):
-            self.bytes: bytes = b""
-            self.offset: int = 0
-
-    memory_player = MemoryPlayerState()
-
-    def on_need_data(source: Gst.Element, length: int) -> None:
-        if length > 2 * 1024 * 1024 or length <= 0:
-            length = 64 * 1024
-
-        data = memory_player.bytes
-        offset = memory_player.offset
-
-        end_offset = min(offset + length, len(data))
-        chunk = data[offset:end_offset]
-
-        if chunk:
-            # Important: Update offset BEFORE emitting to avoid recursive call loops
-            memory_player.offset = end_offset
-            buf = Gst.Buffer.new_wrapped(chunk)
-
-            # Tag buffer with offset mapping for accurate seeking
-            buf.offset = offset
-            buf.offset_end = end_offset
-
-            source.emit("push-buffer", buf)
-        else:
-            source.emit("end-of-stream")
-
-    def on_seek_data(source: Gst.Element, offset: int) -> bool:
-        # Avoid out-of-bounds seeking
-        if offset >= len(memory_player.bytes):
-            return False
-
-        memory_player.offset = max(0, min(offset, len(memory_player.bytes)))
-        return True
-
-    def on_source_setup(player: Gst.Element, source: Gst.Element) -> None:
-        factory = source.get_factory()
-        if factory and factory.get_name() == "appsrc":
-            source.set_property("format", Gst.Format.BYTES)
-            source.set_property("stream-type", GstApp.AppStreamType.RANDOM_ACCESS)
-
-            # Explicitly force size so the pipeline can calculate seek offsets
-            total_bytes = len(memory_player.bytes)
-            source.set_property("size", total_bytes)
-
-            source.connect("need-data", on_need_data)
-            source.connect("seek-data", on_seek_data)
-
-    player.connect("source-setup", on_source_setup)
-
-    def on_audio_bytes_changed(audio_bytes: bytes | None) -> None:
-        if audio_bytes:
-            memory_player.bytes = audio_bytes
-            memory_player.offset = 0
-
-            player.set_state(Gst.State.READY)
-            player.set_property("uri", "appsrc://")
-
+    def on_audio_file_changed(audio_file_path: pathlib.Path | None) -> None:
+        if audio_file_path and audio_file_path.exists():
+            player.play(str(audio_file_path))
             if state.state.value == PlayState.PLAYING:
-                player.set_state(Gst.State.PLAYING)
+                player.pause = False
+            else:
+                player.pause = True
         else:
-            player.set_state(Gst.State.NULL)
+            player.stop()
 
-    import reactivex as rx
-
+    # Subscribe to the audio file path instead of raw bytes
     state.current.pipe(
-        ops.map(lambda s: s.bytes if s else rx.just(None)),
+        ops.map(lambda s: s.audio_file if s else rx.just(None)),
         ops.switch_latest(),
         ops.distinct_until_changed(),
-    ).subscribe(on_audio_bytes_changed)
+    ).subscribe(on_audio_file_changed)
 
     def on_state_changed(s: PlayState) -> None:
-        has_audio = state.current_item and state.current_item.bytes.value
+        has_audio = state.current_item and state.current_item.audio_file.value
+
         if not has_audio:
             if s == PlayState.EMPTY:
-                player.set_state(Gst.State.NULL)
+                player.stop()
                 state.playlist.media.on_next([])
                 state.playlist.index.on_next(0)
             return
 
         if s == PlayState.PLAYING:
-            player.set_state(Gst.State.PLAYING)
+            player.pause = False
         elif s == PlayState.PAUSED or s == PlayState.LOADING:
-            player.set_state(Gst.State.PAUSED)
+            player.pause = True
             if s == PlayState.LOADING and state.current_item:
-                # Reset time to 0 when loading new track
                 state.stream.current_time.on_next(0)
-
         elif s == PlayState.EMPTY:
-            player.set_state(Gst.State.NULL)
+            player.stop()
             state.playlist.media.on_next([])
             state.playlist.index.on_next(0)
 
     state.state.subscribe(on_state_changed)
 
     def on_volume_changed(vol: float) -> None:
-        player.set_property("volume", vol)
+        # MPV volume is generally 0-100+
+        player.volume = vol * 100
 
     state.stream.volume.subscribe(on_volume_changed)
 
     def update_time_state() -> bool:
-        # Only update time if we're currently playing, to avoid unnecessary queries when paused
         if not state.current_item:
             return True  # Keep timeout alive
-        if state.state.value == PlayState.PLAYING:
-            # Query position
-            success_pos, pos = player.query_position(Gst.Format.TIME)
-            if success_pos:
-                state.stream.current_time.on_next(pos)
 
-            # Query total duration
-            success_dur, dur = player.query_duration(Gst.Format.TIME)
-            if success_dur:
-                state.stream.total_time.on_next(dur)
-        return True  # Keep timeout alive
+        if state.state.value == PlayState.PLAYING:
+            # MPV uses seconds (float), while the app streams expect nanoseconds (int)
+            pos = player.time_pos
+            if pos is not None:
+                state.stream.current_time.on_next(int(pos * 1e9))
+
+            dur = player.duration
+            if dur is not None:
+                state.stream.total_time.on_next(int(dur * 1e9))
+
+        return True
 
     GLib.timeout_add(500, update_time_state)
 
-    bus = player.get_bus()
-    if not bus:
-        logging.error("Failed to get GStreamer bus.")
-        raise RuntimeError("GStreamer bus initialization failed")
-    bus.add_signal_watch()
+    # Watch for End of File (EOS) via MPV's property observer
+    @player.property_observer("eof-reached")
+    def on_eof(name, value):
+        if value:  # True when the track finishes naturally
 
-    def on_bus_message(bus: Gst.Bus, message: Gst.Message) -> None:
-        # If current is None, we have no track loaded, so ignore messages
-        if not state.current_item:
-            return
-        if message.type == Gst.MessageType.EOS:
-            # Defer all state changes out of the GStreamer bus callback.
             def handle_eos() -> bool:
                 if state.repeat_mode.value == RepeatMode.ONE:
-                    player.seek_simple(
-                        Gst.Format.TIME,
-                        Gst.SeekFlags.FLUSH | Gst.SeekFlags.ACCURATE,
-                        0,
-                    )
-                    player.set_state(Gst.State.PLAYING)
+                    player.time_pos = 0
+                    player.pause = False
                     state.stream.current_time.on_next(0)
                     return False
 
@@ -413,22 +337,14 @@ def setup_player(state: PlayerState) -> Gst.Element:
                 return False
 
             GLib.idle_add(handle_eos)
-        elif message.type == Gst.MessageType.ERROR:
-            err, debug = message.parse_error()
-            logging.error(f"GStreamer Error: {err}, {debug}")
-            GLib.idle_add(lambda: state.state.on_next(PlayState.PAUSED) or False)
-
-    bus.connect("message", on_bus_message)
 
     def on_seek_request(position_ns: int) -> None:
         if not state.current_item:
             return
 
-        # Attempt to map time domain seek safely back into the pipeline
-        player.seek_simple(
-            Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.ACCURATE, position_ns
-        )
-
+        # Convert nanoseconds to seconds for MPV
+        pos_sec = position_ns / 1e9
+        player.time_pos = pos_sec
         state.stream.current_time.on_next(position_ns)
 
     state.stream.seek_request.subscribe(on_seek_request)
@@ -440,47 +356,43 @@ def setup_player(state: PlayerState) -> Gst.Element:
 
         client = state.client
         state.state.on_next(PlayState.LOADING)
-        import threading
-
         current_id = current.id
+
         if not current_id:
             return
 
-        def on_audio_file(audio_file: Optional[tuple[LocalAudio, Any]]) -> None:
+        def on_audio_file(audio_file: Optional[tuple[Any, Any]]) -> None:
             if not current:
                 raise RuntimeError("Current item changed during audio file fetch")
             if not audio_file:
                 return
+
             file = audio_file[0].path
             if not file.exists():
                 raise RuntimeError(f"Audio file not found: {file}")
+
             if not state.current_item or not state.current_item.id == current_id:
                 logging.warning(
                     "Current item changed during audio file fetch, discarding result"
                 )
                 return
 
+            # Note: Populating bytes is no longer strictly needed for playback,
+            # but kept intact in case your app relies on it elsewhere (e.g. streaming to clients).
             def read_file_bytes(path: pathlib.Path):
                 try:
                     if not current:
                         return
                     audio_bytes = path.read_bytes()
-
-                    def _update_state():
-                        if current is not None:
-                            current.bytes.on_next(audio_bytes)
-                            state.state.on_next(PlayState.PLAYING)
-                        return False
-
-                    GLib.idle_add(_update_state)
+                    GLib.idle_add(lambda: current.bytes.on_next(audio_bytes) or False)
                 except Exception as e:
                     logging.error(f"Failed to read audio file bytes: {e}")
 
             current.audio_file.on_next(file)
             threading.Thread(target=read_file_bytes, args=(file,)).start()
 
-            # client.add
-            # Only change state if this is still the active track
+            # Trigger play state
+            GLib.idle_add(lambda: state.state.on_next(PlayState.PLAYING) or False)
 
         client.get_audio_file(current_id).subscribe(
             on_next=on_audio_file,
@@ -489,7 +401,7 @@ def setup_player(state: PlayerState) -> Gst.Element:
             ),
         )
 
-        def on_song_detail(data: Optional[tuple[SongDetail, Any]]) -> None:
+        def on_song_detail(data: Optional[tuple[Any, Any]]) -> None:
             if not current:
                 raise RuntimeError("Current item changed during song detail fetch")
             if not data:
@@ -497,29 +409,12 @@ def setup_player(state: PlayerState) -> Gst.Element:
             song_detail, raw_data = data
             if not state.current_item or not state.current_item.id == current_id:
                 logging.warning(
-                    "Current item changed during song detail fetch, discarding result"
+                    "Current item changed during song detail fetch, discarding"
                 )
                 return
+
             current.song = song_detail
 
-            # Temporary test to see difference between parsed item and original
-            parsed_dict = song_detail.model_dump(by_alias=True)
-            raw_keys = set((raw_data or {}).keys())
-            parsed_keys = set(parsed_dict.keys())
-            missing_in_parsed = raw_keys - parsed_keys
-            logging.info(f"Dict diff for {current_id} - Keys in raw but not parsed:")
-            for key in sorted(list(missing_in_parsed)):
-                logging.info(f"  - {key}")
-            if "playbackTracking" in missing_in_parsed:
-                logging.info(f"  (confirming playbackTracking was missing in parsed)")
-
-            # client.add_history_item(rx.just(song_detail)).subscribe(
-            #     on_next=lambda _: logging.info(f"Added {current_id} to history"),
-            #     on_error=lambda e: logging.error(
-            #         f"Could not add {current_id} to history: {e}"
-            #     ),
-            # )
-            # Delay 10 seconds before adding to history to avoid cluttering history with skipped songs
             def delayed_history_add():
                 if state.current_item and state.current_item.id == current_id:
                     client.add_history_item(rx.just(song_detail)).subscribe(
@@ -530,11 +425,7 @@ def setup_player(state: PlayerState) -> Gst.Element:
                             f"Could not add {current_id} to history: {e}"
                         ),
                     )
-                else:
-                    logging.info(
-                        f"Skipping history add for {current_id} because current item changed"
-                    )
-                return False  # Don't repeat the timeout
+                return False
 
             GLib.timeout_add(10 * 1000, delayed_history_add)
 
@@ -546,8 +437,6 @@ def setup_player(state: PlayerState) -> Gst.Element:
         )
 
     state.current.subscribe(on_current)
-
-    import sys
 
     if sys.platform.startswith("linux"):
         from lib.sys.mpris import setup_mpris_controller
