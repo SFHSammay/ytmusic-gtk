@@ -7,10 +7,7 @@ from lib.state.player_state import play_watch_playlist
 from typing import Optional, Literal
 import reactivex as rx
 import logging
-from gi.repository import Gtk, Adw, GLib, Pango, Gdk
-
-# Assume LoadingUI is imported here
-# from lib.ui.loading import LoadingUI
+from gi.repository import Gtk, Adw, GLib
 
 
 def CollectionDetailPage(
