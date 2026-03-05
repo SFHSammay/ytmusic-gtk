@@ -18,17 +18,26 @@ A Desktop YouTube Music client in GTK4.
 <img width="1012" height="744" alt="mac" src="https://github.com/user-attachments/assets/7ef0acab-e0b2-48dd-a155-37dfd745eb87" />
 
 ## Features
+
 - Login (partial)
 - Playback (partial)
 - Home Page (partial)
 - Like/dislike
 
+## Getting Started
 
+### Prerequisites
 
+To run this application, you will need to install the following dependencies on your system:
 
+- **[uv](https://docs.astral.sh/uv/#installation)**: An extremely fast Python package installer and resolver.
+- **[GTK4 / libadwaita](https://www.gtk.org/docs/installations/)**: The GNOME UI libraries and their respective Python bindings.
+- **[NodeJS](https://nodejs.org/en/download/), [Bun](https://bun.sh/docs/installation), or [Deno](https://deno.land/manual/getting_started/installation)**: Required by `yt-dlp` to execute JavaScript for extracting certain streams.
 
+### Running the App
 
+Once you have the dependencies installed, you can simply run the application using `uv`:
 
-
-
-
+```bash
+uv run main.py
+```
