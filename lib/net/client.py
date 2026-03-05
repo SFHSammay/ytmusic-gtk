@@ -191,7 +191,7 @@ class YTClient:
     def get_audio_file(
         self, video_id: RxVal[str], *, blocking: bool = False
     ) -> Optional[dict]:
-        from lib.state.player_state import get_audio_file
+        from lib.net.utils import get_audio_file
 
         path = get_audio_file(self.api, unwrap(video_id))
         return {

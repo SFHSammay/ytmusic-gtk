@@ -9,7 +9,7 @@ from lib.ui.about import show_about_window
 from lib.ui.main_window import YTMusicWindow
 from pathlib import Path
 import logging
-from gi.repository import Gtk, Adw, Gst, GLib, Pango, Gio, GdkPixbuf, Gdk, GObject
+from gi.repository import Gtk, Adw, GLib, Gio, Gdk, GObject
 import reactivex as rx
 from reactivex import operators as ops
 from reactivex.scheduler import ThreadPoolScheduler

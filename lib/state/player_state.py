@@ -1,10 +1,7 @@
+from lib.net.client import LocalAudio
 from lib.data import LikeStatus
 from lib.net.client import YTClient
 from typing import Any
-from typing import cast
-from lib.sys.env import CACHE_DIR
-from typing import Literal
-from lib.data import SongDetail
 from lib.data import WatchPlaylist
 from reactivex import combine_latest
 import pathlib
@@ -18,7 +15,6 @@ from gi.repository import GLib, Gst
 from reactivex.subject import BehaviorSubject, Subject
 from reactivex import operators as ops
 import reactivex as rx
-import ytmusicapi
 
 
 # Enum for the player state
@@ -115,64 +111,6 @@ class PlayerState:
         if 0 <= idx < len(media_list):
             return media_list[idx]
         return None
-
-
-INFO_CACHE = {}
-
-
-def get_item_info(yt: "ytmusicapi.YTMusic", video_id: str) -> SongDetail:
-    if video_id in INFO_CACHE:
-        return INFO_CACHE[video_id]
-    data = yt.get_song(video_id)
-    song_detail = SongDetail.model_validate(data)
-    INFO_CACHE[video_id] = song_detail
-    return song_detail
-
-
-def get_audio_file(yt: "ytmusicapi.YTMusic", video_id: str) -> pathlib.Path:
-    from yt_dlp import YoutubeDL
-
-    download_dir = CACHE_DIR / "songs" / video_id
-    download_dir.mkdir(parents=True, exist_ok=True)
-
-    logging.info(f"Downloading media to: {download_dir}")
-
-    detail = get_item_info(yt, video_id)
-    url = detail.microformat.microformat_data_renderer.url_canonical
-
-    marker_file = download_dir / "downloaded.txt"
-
-    if not marker_file.exists():
-        with YoutubeDL(
-            params=cast(
-                Any,
-                {
-                    "js_runtimes": {"bun": {}, "node": {}},
-                    "paths": {"home": str(download_dir.absolute())},
-                    "format": "bestaudio/best",
-                    "noplaylist": True,
-                    "quiet": True,
-                    "no_warnings": True,
-                    "outtmpl": {
-                        "default": "%(id)s.%(ext)s",
-                    },
-                },
-            )
-        ) as ydl:
-            ydl.download([url])
-        with open(marker_file, "w") as f:
-            f.write("downloaded")
-
-    audio_files = list(download_dir.glob("*.m4a"))
-    if not audio_files:
-        audio_files = list(download_dir.glob("*.webm"))
-    if not audio_files:
-        audio_files = list(download_dir.glob("*.opus"))
-    if not audio_files:
-        audio_files = list(download_dir.glob("*.mp3"))
-    if not audio_files:
-        raise FileNotFoundError(f"No audio files found in {download_dir}")
-    return audio_files[0]
 
 
 def start_play(
@@ -440,34 +378,35 @@ def setup_player(state: PlayerState) -> Gst.Element:
     state.stream.seek_request.subscribe(on_seek_request)
 
     def on_current(current: Optional[MediaStatus]) -> None:
-        if not current:
+        logging.info(f"Current: {current}")
+        if not current or current.audio_file.value:
             return
 
-        yt_instance = state.client
-        if not current.audio_file.value:
-            state.state.on_next(PlayState.LOADING)
-            import threading
+        client = state.client
+        state.state.on_next(PlayState.LOADING)
+        import threading
 
-            current_id = current.id
-            if not current_id:
+        current_id = current.id
+        if not current_id:
+            return
+
+        def on_audio_file(audio_file: Optional[tuple[LocalAudio, Any]]) -> None:
+            if not current:
+                raise RuntimeError("Current item changed during audio file fetch")
+            if not audio_file:
                 return
+            file = audio_file[0].path
+            if not file.exists():
+                raise RuntimeError(f"Audio file not found: {file}")
+            current.audio_file.on_next(file)
+            state.state.on_next(PlayState.PLAYING)
 
-            def fetch_audio() -> None:
-                if not yt_instance or not current:
-                    return
-                try:
-                    audio_file = yt_instance.get_audio_file(current_id)
-                    audio_file.subscribe(
-                        on_next=lambda x: current.audio_file.on_next(
-                            x[0].path if x else None
-                        )
-                    )
-                    state.state.on_next(PlayState.PLAYING)
-                except Exception as e:
-                    logging.error(f"Could not fetch audio for {current_id}: {e}")
-                    play_next(state)
-
-            threading.Thread(target=fetch_audio, daemon=True).start()
+        client.get_audio_file(current_id).subscribe(
+            on_next=on_audio_file,
+            on_error=lambda e: logging.error(
+                f"Could not fetch audio for {current_id}: {e}"
+            ),
+        )
 
     state.current.subscribe(on_current)
 
