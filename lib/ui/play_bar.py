@@ -292,7 +292,9 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
 
         yt = state.client
         logging.debug(f"UI: Rating song {current.id} as {new_status}")
-        yt.rate_song(current.id, new_status)
+        yt.rate_song(current.id, new_status).subscribe(
+            on_error=lambda e: logging.error(f"Failed to rate song {current.id}: {e}")
+        )
 
     def on_dislike_clicked(_) -> None:
         current = state.current_item
@@ -306,7 +308,9 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
 
         yt = state.client
         logging.debug(f"UI: Rating song {current.id} as {new_status}")
-        yt.rate_song(current.id, new_status)
+        yt.rate_song(current.id, new_status).subscribe(
+            on_error=lambda e: logging.error(f"Failed to rate song {current.id}: {e}")
+        )
 
     like_btn.connect("clicked", on_like_clicked)
     dislike_btn.connect("clicked", on_dislike_clicked)
