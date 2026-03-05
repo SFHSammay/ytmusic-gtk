@@ -23,6 +23,7 @@ from lib.data import AlbumData, AccountInfo, SongDetail
 logger = logging.getLogger(__name__)
 
 thread_pool_scheduler = ThreadPoolScheduler(max_workers=multiprocessing.cpu_count())
+download_scheduler = ThreadPoolScheduler(max_workers=1)
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -38,6 +39,8 @@ class LocalAudio(BaseModel):
 
 def rx_fetch(
     parser: type[T] | TypeAdapter[T],
+    *,
+    scheduler: Optional[ThreadPoolScheduler] = None,
 ) -> Callable[
     [Callable[P, Any]],
     # The return type is now strictly an Observable
@@ -106,7 +109,7 @@ def rx_fetch(
                     )
 
                 return rx.from_callable(fetch_work).pipe(
-                    operators.subscribe_on(thread_pool_scheduler)
+                    operators.subscribe_on(scheduler or thread_pool_scheduler)
                 )
 
             return trigger.pipe(
@@ -187,7 +190,7 @@ class YTClient:
             unwrap(shuffle),
         )
 
-    @rx_fetch(LocalAudio)
+    @rx_fetch(LocalAudio, scheduler=download_scheduler)
     def get_audio_file(
         self, video_id: RxVal[str], *, blocking: bool = False
     ) -> Optional[dict]:

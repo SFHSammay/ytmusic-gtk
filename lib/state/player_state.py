@@ -39,6 +39,7 @@ class MediaStatus:
     audio_file: BehaviorSubject[Optional[pathlib.Path]] = field(
         default_factory=lambda: BehaviorSubject[Optional[pathlib.Path]](None)
     )
+    is_placeholder_music: bool = field(default=False)
 
     title: Optional[str] = field(default=None)
     artist: Optional[str] = field(default=None)
@@ -130,12 +131,11 @@ def start_play(
     state.state.on_next(PlayState.LOADING)
     if placeholder_music:
         logging.info("Playing placeholder music")
+        placeholder_music.is_placeholder_music = True
         state.playlist.media.on_next([placeholder_music])
         state.playlist.index.on_next(0)
         state.playlist.playlist_id.on_next(None)
         state.playlist.name.on_next(None)
-        # set to paused
-        state.state.on_next(PlayState.PAUSED)
 
     playlist = client.get_watch_playlist(playlist_id=playlist_id, video_id=video_id)
 
@@ -347,10 +347,7 @@ def setup_player(state: PlayerState) -> Gst.Element:
 
     def on_current(current: Optional[MediaStatus]) -> None:
         logging.info(f"Current: {current}")
-        if not current or current.audio_file.value:
-            return
-        # If it paused, do nothing
-        if state.state.value == PlayState.PAUSED:
+        if not current or current.audio_file.value or current.is_placeholder_music:
             return
 
         client = state.client
