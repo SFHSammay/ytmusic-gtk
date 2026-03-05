@@ -1,3 +1,4 @@
+from requests import Response
 import logging
 from reactivex.scheduler.mainloop.gtkscheduler import GtkScheduler
 from lib.data import LikeStatus
@@ -317,4 +318,15 @@ class YTClient:
         force_refresh: bool = False,
     ) -> Optional[list[dict]]:
         res = self.api.get_library_playlists(limit=unwrap(limit))
+
         return res
+
+    @rx_fetch(Any, use_cache=False)
+    def add_history_item(
+        self,
+        song: RxVal[dict[str, Any]],
+        *,
+        blocking: bool = False,
+        force_refresh: bool = False,
+    ) -> Optional[Response]:
+        return self.api.add_history_item(unwrap(song))

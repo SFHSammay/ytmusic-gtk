@@ -1,3 +1,5 @@
+from lib.data import SongDetail
+import logging
 from lib.data import AlbumData
 from lib.net.client import LocalAudio
 from lib.data import LikeStatus
@@ -50,6 +52,8 @@ class MediaStatus:
     like_status: BehaviorSubject[LikeStatus] = field(
         default_factory=lambda: BehaviorSubject[LikeStatus]("INDIFFERENT")
     )
+
+    song: Optional[SongDetail] = field(default=None)
 
 
 @dataclass
@@ -387,16 +391,47 @@ def setup_player(state: PlayerState) -> Gst.Element:
             file = audio_file[0].path
             if not file.exists():
                 raise RuntimeError(f"Audio file not found: {file}")
+            if not state.current_item or not state.current_item.id == current_id:
+                logging.warning(
+                    "Current item changed during audio file fetch, discarding result"
+                )
+                return
             current.audio_file.on_next(file)
+            state.state.on_next(PlayState.PLAYING)
 
+            # client.add
             # Only change state if this is still the active track
-            if state.current_item and state.current_item.id == current_id:
-                state.state.on_next(PlayState.PLAYING)
 
         client.get_audio_file(current_id).subscribe(
             on_next=on_audio_file,
             on_error=lambda e: logging.error(
                 f"Could not fetch audio for {current_id}: {e}"
+            ),
+        )
+
+        def on_song_detail(data: Optional[tuple[SongDetail, Any]]) -> None:
+            if not current:
+                raise RuntimeError("Current item changed during song detail fetch")
+            if not data:
+                return
+            song_detail, raw_data = data
+            if not state.current_item or not state.current_item.id == current_id:
+                logging.warning(
+                    "Current item changed during song detail fetch, discarding result"
+                )
+                return
+            current.song = song_detail
+            client.add_history_item(rx.just(raw_data)).subscribe(
+                on_next=lambda _: logging.info(f"Added {current_id} to history"),
+                on_error=lambda e: logging.error(
+                    f"Could not add {current_id} to history: {e}"
+                ),
+            )
+
+        client.get_song(current_id).subscribe(
+            on_next=on_song_detail,
+            on_error=lambda e: logging.error(
+                f"Could not fetch song detail for {current_id}: {e}"
             ),
         )
 
