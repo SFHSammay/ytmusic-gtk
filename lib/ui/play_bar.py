@@ -257,22 +257,30 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
             return
         for btn in (dislike_btn, like_btn, more_btn):
             btn.set_sensitive(current != PlayState.EMPTY)
-        current.like_status.subscribe(
-            lambda val: toggle_icon(
-                like_btn,
-                val == "LIKE",
-                "thumbs-up-symbolic",
-                "thumbs-up-outline-symbolic",
+
+        def on_rate(val: LikeStatus) -> None:
+            logging.debug(f"UI: Rating current {state.current_item} as {val}")
+            if val == "LIKE":
+                like_btn.set_icon_name("thumbs-up-symbolic")
+                dislike_btn.set_icon_name("thumbs-down-outline-symbolic")
+            elif val == "DISLIKE":
+                like_btn.set_icon_name("thumbs-up-outline-symbolic")
+                dislike_btn.set_icon_name("thumbs-down-symbolic")
+            else:
+                like_btn.set_icon_name("thumbs-up-outline-symbolic")
+                dislike_btn.set_icon_name("thumbs-down-outline-symbolic")
+
+            current = state.current_item
+            if not current:
+                return
+
+            state.client.rate_song(current.id, val).subscribe(
+                on_error=lambda e: logging.error(
+                    f"Failed to rate song {current.id}: {e}"
+                )
             )
-        )
-        current.like_status.subscribe(
-            lambda val: toggle_icon(
-                dislike_btn,
-                val == "DISLIKE",
-                "thumbs-down-symbolic",
-                "thumbs-down-outline-symbolic",
-            )
-        )
+
+        current.like_status.subscribe(on_rate)
         subtitle_label.set_text(
             " • ".join(filter(None, [current.artist, current.album_name, current.year]))
         )
@@ -290,12 +298,6 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
         )
         current.like_status.on_next(new_status)
 
-        yt = state.client
-        logging.debug(f"UI: Rating song {current.id} as {new_status}")
-        yt.rate_song(current.id, new_status).subscribe(
-            on_error=lambda e: logging.error(f"Failed to rate song {current.id}: {e}")
-        )
-
     def on_dislike_clicked(_) -> None:
         current = state.current_item
         if not current:
@@ -305,12 +307,6 @@ def SongInfo(state: PlayerState) -> Gtk.Widget:
             "INDIFFERENT" if current.like_status.value == "DISLIKE" else "DISLIKE"
         )
         current.like_status.on_next(new_status)
-
-        yt = state.client
-        logging.debug(f"UI: Rating song {current.id} as {new_status}")
-        yt.rate_song(current.id, new_status).subscribe(
-            on_error=lambda e: logging.error(f"Failed to rate song {current.id}: {e}")
-        )
 
     like_btn.connect("clicked", on_like_clicked)
     dislike_btn.connect("clicked", on_dislike_clicked)
