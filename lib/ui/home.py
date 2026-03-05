@@ -25,7 +25,7 @@ from lib.state.player_state import PlayState
 
 def HomeItemCard(
     item: HomeItemData,
-    player_state: PlayerState,
+    player: PlayerState,
     client: YTClient,
     nav_view: Adw.NavigationView,
 ) -> Gtk.Box:
@@ -115,7 +115,7 @@ def HomeItemCard(
 
         GLib.idle_add(do_update_icon)
 
-    player_state.state.subscribe(update_play_icon)
+    player.state.subscribe(update_play_icon)
 
     play_box.append(play_stack)
     overlay.add_overlay(play_box)
@@ -224,7 +224,7 @@ def HomeItemCard(
     def on_card_click(gesture: Gtk.GestureClick, n_press: int, x: float, y: float):
         # Check if click landed on the play button area
         if collection_play_btn and collection_play_btn.get_opacity() > 0.5:
-            from gi.repository import Graphene  # type: ignore
+            from gi.repository import Graphene
 
             point = Graphene.Point()
             point.x = x
@@ -239,30 +239,26 @@ def HomeItemCard(
                         logging.info(
                             f"Quick-playing collection: {item.title} ({playlist_id})"
                         )
-                        start_play(state=player_state, playlist_id=playlist_id)
+                        start_play(state=player, playlist_id=playlist_id)
                     return
 
         logging.info(f"Clicked on card: {item}")
 
         def is_current_playing():
             return (
-                player_state.current_item
+                player.current_item
                 and item.video_id
-                and player_state.current_item.id == item.video_id
-            ) or (
-                player_state.playlist.playlist_id.value
-                and item.playlist_id
-                and player_state.playlist.playlist_id.value == item.playlist_id
+                and player.current_item.id == item.video_id
             )
 
         if is_current_playing():
-            if player_state.state.value == PlayState.PLAYING:
-                player_state.state.on_next(PlayState.PAUSED)
+            if player.state.value == PlayState.PLAYING:
+                player.state.on_next(PlayState.PAUSED)
                 return
-            elif player_state.state.value == PlayState.PAUSED:
-                player_state.state.on_next(PlayState.PLAYING)
+            elif player.state.value == PlayState.PAUSED:
+                player.state.on_next(PlayState.PLAYING)
                 return
-            elif player_state.state.value == PlayState.LOADING:
+            elif player.state.value == PlayState.LOADING:
                 return
 
         if item.video_id:
@@ -277,7 +273,7 @@ def HomeItemCard(
             )
 
             start_play(
-                state=player_state,
+                state=player,
                 playlist_id=item.playlist_id,
                 video_id=item.video_id,
                 placeholder_music=placeholder_music,
@@ -287,7 +283,7 @@ def HomeItemCard(
             logging.info(
                 f"Playing album/single via audioPlaylistId: {item.audio_playlist_id}"
             )
-            start_play(state=player_state, playlist_id=item.audio_playlist_id)
+            start_play(state=player, playlist_id=item.audio_playlist_id)
             return
         else:
             # No video_id — this is a collection (album, playlist, etc.)
@@ -296,7 +292,7 @@ def HomeItemCard(
                 from lib.ui.collection_detail import CollectionDetailPage
 
                 detail_page = CollectionDetailPage(
-                    item.browse_id, "album", player_state, client
+                    item.browse_id, "album", player, client
                 )
                 nav_view.push(detail_page)
                 return
@@ -306,14 +302,14 @@ def HomeItemCard(
                 from lib.ui.collection_detail import CollectionDetailPage
 
                 detail_page = CollectionDetailPage(
-                    item.playlist_id, "playlist", player_state, client
+                    item.playlist_id, "playlist", player, client
                 )
                 nav_view.push(detail_page)
                 return
 
             logging.warning("Item has no video ID or audio playlist ID, cannot play.")
             logging.debug(f"Item: {item}")
-            player_state.state.on_next(PlayState.EMPTY)
+            player.state.on_next(PlayState.EMPTY)
             return
 
         title = item.title or "Unknown"
@@ -345,7 +341,7 @@ def HomeItemCard(
             )
 
         start_play(
-            state=player_state,
+            state=player,
             video_id=item.video_id,
             playlist_id=item.playlist_id,
             placeholder_music=placeholder_music,
@@ -376,7 +372,7 @@ def HomeItemCard(
         else:
             update_playing_state(None)
 
-    player_state.current.subscribe(on_current_changed)
+    player.current.subscribe(on_current_changed)
     return card
 
 
