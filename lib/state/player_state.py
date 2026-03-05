@@ -119,14 +119,11 @@ def start_play(
     playlist_id: Optional[str] = None,
     placeholder_music: Optional[MediaStatus] = None,
 ) -> None:
-    yt = state.client
-    if not yt:
-        logging.error("No YTMusic instance available.")
-        return
+    client = state.client
 
     # If there is no video_id nor playlist_id, we can't play anything
-    if not video_id and not playlist_id and not placeholder_music:
-        logging.warning("No video_id, playlist_id, nor placeholder_music provided.")
+    if not video_id and not playlist_id:
+        logging.warning("No video_id nor playlist_id provided.")
         return
 
     state.state.on_next(PlayState.LOADING)
@@ -135,7 +132,7 @@ def start_play(
         state.playlist.index.on_next(0)
         state.playlist.playlist_id.on_next(None)
         state.playlist.name.on_next(None)
-    playlist = yt.get_watch_playlist(playlist_id=playlist_id, video_id=video_id)
+    playlist = client.get_watch_playlist(playlist_id=playlist_id, video_id=video_id)
 
     def on_playlist(data: Optional[tuple[WatchPlaylist, dict]]):
         if data is None:
@@ -143,25 +140,52 @@ def start_play(
         watch_playlist, _ = data
 
         media_list: list[MediaStatus] = []
+        used_placeholder = False
+
         for track in watch_playlist.tracks:
             id = track.video_id
             if not id:
                 continue
-            media_list.append(
-                MediaStatus(
-                    id=id,
-                    title=track.title,
-                    artist=track.artists[0].name if track.artists else None,
-                    album_name=track.album.name if track.album else None,
-                    year=track.year,
-                    album_art=track.thumbnails[-1].url if track.thumbnails else None,
-                    like_status=(
-                        BehaviorSubject[LikeStatus](track.like_status)
-                        if track.like_status
-                        else BehaviorSubject[LikeStatus]("INDIFFERENT")
-                    ),
+
+            if (
+                placeholder_music
+                and not used_placeholder
+                and placeholder_music.id == id
+            ):
+                placeholder_music.title = track.title or placeholder_music.title
+                placeholder_music.artist = (
+                    track.artists[0].name if track.artists else None
+                ) or placeholder_music.artist
+                placeholder_music.album_name = (
+                    track.album.name if track.album else None
+                ) or placeholder_music.album_name
+                placeholder_music.year = track.year or placeholder_music.year
+                placeholder_music.album_art = (
+                    track.thumbnails[-1].url if track.thumbnails else None
+                ) or placeholder_music.album_art
+                if track.like_status:
+                    placeholder_music.like_status.on_next(track.like_status)
+
+                media_list.append(placeholder_music)
+                used_placeholder = True
+            else:
+                media_list.append(
+                    MediaStatus(
+                        id=id,
+                        title=track.title,
+                        artist=track.artists[0].name if track.artists else None,
+                        album_name=track.album.name if track.album else None,
+                        year=track.year,
+                        album_art=(
+                            track.thumbnails[-1].url if track.thumbnails else None
+                        ),
+                        like_status=(
+                            BehaviorSubject[LikeStatus](track.like_status)
+                            if track.like_status
+                            else BehaviorSubject[LikeStatus]("INDIFFERENT")
+                        ),
+                    )
                 )
-            )
         state.playlist.media.on_next(media_list)
         state.playlist.index.on_next(0)
         state.playlist.playlist_id.on_next(watch_playlist.playlist_id)
