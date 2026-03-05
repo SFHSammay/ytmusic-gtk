@@ -1,5 +1,5 @@
 from lib.state.player_state import play_watch_playlist
-from typing import Optional
+from typing import Optional, Literal
 from lib.state.player_state import PlayState
 from lib.ui.thumbnail import ThumbnailWidget
 from lib.ui.play_bar import PlayerState
@@ -20,12 +20,14 @@ def PlayItemCard(
     player: PlayerState,
     client: YTClient,
     nav_view: Adw.NavigationView,
+    mode: Literal["card", "row"] = "card",
 ) -> Gtk.Box:
     """
-    Creates a card widget for a single item in the Home page.
+    Creates a card widget for a single item in the Home page or Search page.
     """
     # Deterministic size: 160x160 keeps it looking like standard album art/thumbnails
-    IMAGE_SIZE = 160
+    # Make it smaller for row mode
+    IMAGE_SIZE = 160 if mode == "card" else 80
 
     logging.debug(
         f"Creating card for item: {item.title} (Video ID: {item.video_id}) - Type: {item.video_type}"
@@ -41,10 +43,21 @@ def PlayItemCard(
     width = int(IMAGE_SIZE * aspect_ratio)
     height = IMAGE_SIZE
 
-    card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-    card.set_size_request(width, height + 100)  # Extra height for text below the image
-    card.set_halign(Gtk.Align.START)
-    card.set_valign(Gtk.Align.START)
+    card = Gtk.Box(
+        orientation=(
+            Gtk.Orientation.VERTICAL if mode == "card" else Gtk.Orientation.HORIZONTAL
+        ),
+        spacing=16 if mode == "row" else 12,
+    )
+    if mode == "card":
+        card.set_size_request(
+            width, height + 100
+        )  # Extra height for text below the image
+    else:
+        card.set_size_request(-1, height)
+        card.set_hexpand(True)
+    card.set_halign(Gtk.Align.START if mode == "card" else Gtk.Align.FILL)
+    card.set_valign(Gtk.Align.START if mode == "card" else Gtk.Align.CENTER)
 
     import reactivex as rx
 
@@ -118,7 +131,12 @@ def PlayItemCard(
     # text_box.set_margin_bottom(24)  # Gives the bottom of the card some breathing room
     # Reserve a fixed minimum height so all cards are the same size regardless of title length.
     # set_lines(2) is a maximum – a 1-line title would otherwise shrink the card.
-    text_box.set_size_request(-1, 72)
+    if mode == "card":
+        text_box.set_size_request(-1, 72)
+    else:
+        text_box.set_valign(Gtk.Align.CENTER)
+        text_box.set_halign(Gtk.Align.START)
+        text_box.set_margin_start(16)
 
     title_lbl = Gtk.Label(label=item.title)
     title_lbl.set_halign(Gtk.Align.START)
@@ -130,8 +148,9 @@ def PlayItemCard(
     title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
 
     # Ensure the label doesn't try to expand horizontally beyond the image
-    title_lbl.set_width_chars(1)
-    title_lbl.set_max_width_chars(1)
+    if mode == "card":
+        title_lbl.set_width_chars(1)
+        title_lbl.set_max_width_chars(1)
 
     title_lbl.add_css_class("heading")
 
@@ -151,9 +170,12 @@ def PlayItemCard(
     subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
 
     # 4. Ensure it doesn't push the card wider than the image
-    subtitle_lbl.set_width_chars(1)
-    subtitle_lbl.set_hexpand(True)
-    subtitle_lbl.set_size_request(IMAGE_SIZE, -1)
+    if mode == "card":
+        subtitle_lbl.set_hexpand(True)
+        subtitle_lbl.set_width_chars(1)
+        subtitle_lbl.set_size_request(IMAGE_SIZE, -1)
+    else:
+        subtitle_lbl.set_size_request(-1, -1)
 
     text_box.append(title_lbl)
     text_box.append(subtitle_lbl)
@@ -208,8 +230,24 @@ def PlayItemCard(
 
         hover_subject.subscribe(on_hover_changed)
 
-    card.append(overlay)
+    # Wrap the overlay to enforce a uniform grid column for images
+    image_envelope = Gtk.Box()
+    if mode == "row":
+        image_envelope.set_size_request(int(IMAGE_SIZE * 16 / 9), height)
+        image_envelope.set_halign(Gtk.Align.START)
+        overlay.set_halign(Gtk.Align.START)
+    else:
+        image_envelope.set_size_request(width, height)
+
+    image_envelope.append(overlay)
+
+    card.append(image_envelope)
     card.append(text_box)
+
+    if mode == "row":
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        card.append(spacer)
 
     click = Gtk.GestureClick.new()
 

@@ -44,21 +44,18 @@ def SearchPage(
     clamp.set_margin_end(24)
     scrolled.set_child(clamp)
 
-    flowbox = Gtk.FlowBox()
-    flowbox.set_valign(Gtk.Align.START)
-    flowbox.set_max_children_per_line(10)
-    flowbox.set_min_children_per_line(2)
-    flowbox.set_column_spacing(16)
-    flowbox.set_row_spacing(16)
-
-    # We don't want selection
-    flowbox.set_selection_mode(Gtk.SelectionMode.NONE)
+    results_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+    results_list.set_valign(Gtk.Align.START)
+    results_list.set_hexpand(True)
+    results_list.set_halign(Gtk.Align.FILL)
 
     # Spinner box
     main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+    main_box.set_hexpand(True)
+    main_box.set_halign(Gtk.Align.FILL)
     clamp.set_child(main_box)
 
-    main_box.append(flowbox)
+    main_box.append(results_list)
 
     bottom_spinner_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
     bottom_spinner_box.set_margin_top(24)
@@ -129,8 +126,10 @@ def SearchPage(
 
                     if item_key not in rendered_items:
                         rendered_items.add(item_key)
-                        card = PlayItemCard(item_data, player_state, client, nav_view)
-                        flowbox.append(card)
+                        card = PlayItemCard(
+                            item_data, player_state, client, nav_view, mode="row"
+                        )
+                        results_list.append(card)
                 except Exception as e:
                     logging.warning(f"Failed to parse search item: {e} -> {raw_item}")
 
