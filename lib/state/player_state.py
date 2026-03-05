@@ -136,6 +136,11 @@ def start_play(
         state.playlist.index.on_next(0)
         state.playlist.playlist_id.on_next(None)
         state.playlist.name.on_next(None)
+    else:
+        state.playlist.media.on_next([])
+        state.playlist.index.on_next(0)
+        state.playlist.playlist_id.on_next(None)
+        state.playlist.name.on_next(None)
 
     playlist = client.get_watch_playlist(playlist_id=playlist_id, video_id=video_id)
 
