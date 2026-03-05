@@ -162,12 +162,14 @@ def NowPlayingView(
     queue_scroll = Gtk.ScrolledWindow()
     queue_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     queue_scroll.set_vexpand(True)
+    queue_scroll.set_hexpand(True)
 
     queue_list = Gtk.ListBox()
     queue_list.add_css_class("boxed-list")
     queue_list.add_css_class("transparent")
     queue_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
     queue_list.set_valign(Gtk.Align.START)
+    queue_list.set_hexpand(True)
 
     def _on_row_activated(box: Gtk.ListBox, row: Gtk.ListBoxRow) -> None:
         state.playlist.index.on_next(row.get_index())
@@ -183,7 +185,12 @@ def NowPlayingView(
     left_clamp = Adw.Clamp(orientation=Gtk.Orientation.HORIZONTAL)
     left_clamp.set_maximum_size(400)
     left_clamp.set_child(left_pane)
-    split_box.append(left_clamp)
+
+    left_clamp_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+    left_clamp_box.append(left_clamp)
+    left_clamp_box.set_size_request(400, -1)
+
+    split_box.append(left_clamp_box)
     split_box.append(right_pane)
 
     view.set_content(split_box)
