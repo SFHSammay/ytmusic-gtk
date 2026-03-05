@@ -20,6 +20,11 @@ from pydantic import BaseModel
 import time
 from lib.data import AlbumData, AccountInfo, SongDetail
 
+import threading
+import sqlite3
+import pickle
+import hashlib
+
 logger = logging.getLogger(__name__)
 
 thread_pool_scheduler = ThreadPoolScheduler(max_workers=multiprocessing.cpu_count())
@@ -50,38 +55,150 @@ def _make_hashable(obj: Any) -> Any:
     return obj
 
 
+_SQLITE_DB_PATH = "rx_cache.db"
+_sqlite_write_lock = threading.Lock()
+
+
+def _init_sqlite_cache():
+    """Initializes the SQLite database with WAL mode for better concurrency."""
+    with _sqlite_write_lock:
+        with sqlite3.connect(_SQLITE_DB_PATH) as conn:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS cache (
+                    func_name TEXT,
+                    cache_key TEXT,
+                    timestamp REAL,
+                    data BLOB,
+                    PRIMARY KEY (func_name, cache_key)
+                )
+            """
+            )
+
+
+_init_sqlite_cache()
+
+
 def rx_fetch(
     parser: type[T] | TypeAdapter[T],
     *,
     scheduler: Optional[ThreadPoolScheduler] = None,
     use_cache: bool = True,
-    ttl: float = 60.0,  # Added TTL parameter, defaults to 60 seconds
+    disk_cache: bool = True,
+    ttl: float = 60.0 * 5,
 ) -> Callable[
     [Callable[P, Any]],
     Callable[P, Observable[Optional[tuple[T, Any]]]],
 ]:
-    """
-    Decorator to wrap client methods, allowing them to accept both raw values and Observables as arguments.
-    The decorated method will return an Observable that emits the parsed result whenever any of the input Observables emit a new value.
-    The return value will be a tuple of (parsed_result, raw_data) where parsed_result is the output of the provided parser and raw_data is the original data returned by the API method.
-    If `blocking=True` is passed as a keyword argument, the method will execute synchronously and block until the result is available. It will still return an Observable, but it will emit the result immediately and complete.
-    If `force_refresh=True` is passed as a keyword argument, the method will bypass the cache and fetch fresh data from the API, even if a cached value exists for the given arguments.
-    """
     adapter = parser if isinstance(parser, TypeAdapter) else TypeAdapter(parser)
 
     def decorator(
         func: Callable[P, Any],
     ) -> Callable[P, Observable[Optional[tuple[T, Any]]]]:
 
-        # Method-level cache store now stores: {cache_key: (timestamp, parsed_data)}
         cache_store: dict[tuple, tuple[float, Optional[tuple[T, Any]]]] = {}
+        func_name = func.__name__
+
+        def _get_disk_key(resolved_args: tuple, resolved_kwargs: dict) -> str:
+            """Creates a stable string for hashing, ignoring 'self' to avoid pickling errors."""
+            # Skip args[0] if it is a class instance ('self')
+            safe_args = (
+                resolved_args[1:]
+                if resolved_args and hasattr(resolved_args[0], "__dict__")
+                else resolved_args
+            )
+            cache_kwargs = {
+                k: v
+                for k, v in resolved_kwargs.items()
+                if k not in ("blocking", "force_refresh", "cache_only")
+            }
+            stable_str = (
+                f"{func_name}:{repr(safe_args)}:{repr(sorted(cache_kwargs.items()))}"
+            )
+            return hashlib.sha256(stable_str.encode("utf-8")).hexdigest()
+
+        def _get_cache(
+            cache_key: tuple, resolved_args: tuple, resolved_kwargs: dict
+        ) -> tuple[bool, Optional[tuple[T, Any]]]:
+            # 1. Memory Check
+            if use_cache and cache_key in cache_store:
+                cached_time, val = cache_store[cache_key]
+                if time.time() - cached_time < ttl:
+                    return True, val
+
+            # 2. Disk Check
+            if disk_cache:
+                disk_key = _get_disk_key(resolved_args, resolved_kwargs)
+                try:
+                    with sqlite3.connect(_SQLITE_DB_PATH, timeout=10) as conn:
+                        cursor = conn.execute(
+                            "SELECT timestamp, data FROM cache WHERE func_name=? AND cache_key=?",
+                            (func_name, disk_key),
+                        )
+                        row = cursor.fetchone()
+                        if row:
+                            cached_time, blob = row
+                            if time.time() - cached_time < ttl:
+                                raw_data = pickle.loads(blob)
+                                parsed = (
+                                    (adapter.validate_python(raw_data), raw_data)
+                                    if raw_data
+                                    else None
+                                )
+
+                                # Backfill memory cache
+                                if use_cache:
+                                    cache_store[cache_key] = (time.time(), parsed)
+                                return True, parsed
+                            else:
+                                # Cleanup expired disk entry
+                                with _sqlite_write_lock:
+                                    with sqlite3.connect(
+                                        _SQLITE_DB_PATH, timeout=10
+                                    ) as del_conn:
+                                        del_conn.execute(
+                                            "DELETE FROM cache WHERE func_name=? AND cache_key=?",
+                                            (func_name, disk_key),
+                                        )
+                except Exception as e:
+                    logger.warning(f"Disk cache read failed for {func_name}: {e}")
+
+            return False, None
+
+        def _set_cache(
+            cache_key: tuple,
+            resolved_args: tuple,
+            resolved_kwargs: dict,
+            raw_data: Any,
+            parsed_data: Optional[tuple[T, Any]],
+        ):
+            current_time = time.time()
+            if use_cache:
+                cache_store[cache_key] = (current_time, parsed_data)
+
+            if disk_cache:
+                disk_key = _get_disk_key(resolved_args, resolved_kwargs)
+                try:
+                    blob = pickle.dumps(raw_data)
+                    with _sqlite_write_lock:
+                        with sqlite3.connect(_SQLITE_DB_PATH, timeout=10) as conn:
+                            conn.execute(
+                                "REPLACE INTO cache (func_name, cache_key, timestamp, data) VALUES (?, ?, ?, ?)",
+                                (func_name, disk_key, current_time, blob),
+                            )
+                except pickle.PicklingError:
+                    logger.debug(
+                        f"Skipping disk cache for {func_name}: Data is not picklable."
+                    )
+                except Exception as e:
+                    logger.warning(f"Disk cache write failed for {func_name}: {e}")
 
         @wraps(func)
         def wrapper(
             *args: P.args, **kwargs: P.kwargs
         ) -> Observable[Optional[tuple[T, Any]]]:
             blocking = cast(bool, kwargs.get("blocking", False))
-
             has_observable = any(isinstance(a, Observable) for a in args) or any(
                 isinstance(v, Observable) for v in kwargs.values()
             )
@@ -92,32 +209,36 @@ def rx_fetch(
                     raise ValueError("Cannot use blocking=True with Observables.")
 
                 force_refresh = cast(bool, kwargs.get("force_refresh", False))
+                # Changed to False by default
+                cache_only = cast(bool, kwargs.get("cache_only", False))
 
                 cache_kwargs = {
                     k: v
                     for k, v in kwargs.items()
-                    if k not in ("blocking", "force_refresh")
+                    if k not in ("blocking", "force_refresh", "cache_only")
                 }
                 cache_key = (
                     tuple(_make_hashable(a) for a in args),
                     frozenset((k, _make_hashable(v)) for k, v in cache_kwargs.items()),
                 )
 
-                # 1. Cache Hit & TTL Check
-                if use_cache and not force_refresh and cache_key in cache_store:
-                    cached_time, cached_value = cache_store[cache_key]
-                    if time.monotonic() - cached_time < ttl:
-                        return rx.just(cached_value)
+                has_valid_cache, cached_val = False, None
+                if not force_refresh:
+                    has_valid_cache, cached_val = _get_cache(cache_key, args, kwargs)
 
-                # 2. Cache Miss / Expired / Force Refresh
+                if cache_only and has_valid_cache:
+                    return rx.just(cached_val)
+
                 raw_data = func(*args, **kwargs)
                 parsed = (
                     (adapter.validate_python(raw_data), raw_data) if raw_data else None
                 )
 
-                # 3. Store in cache with current timestamp
-                if use_cache:
-                    cache_store[cache_key] = (time.monotonic(), parsed)
+                _set_cache(cache_key, args, kwargs, raw_data, parsed)
+
+                if not cache_only and has_valid_cache:
+                    return rx.of(cached_val, parsed)
+
                 return rx.just(parsed)
 
             # --- Reactive Path ---
@@ -130,13 +251,11 @@ def rx_fetch(
 
             all_observables = cast(list[Observable[Any]], obs_args + obs_kwargs)
 
-            if all_observables:
-                trigger = cast(
-                    Observable[tuple[Any, ...]],
-                    rx.combine_latest(*all_observables),  # type: ignore
-                )
-            else:
-                trigger = rx.just(())
+            trigger = (
+                cast(Observable[tuple[Any, ...]], rx.combine_latest(*all_observables))
+                if all_observables
+                else rx.just(())
+            )
 
             def create_fetch_observable(
                 combined_vals: tuple,
@@ -148,40 +267,51 @@ def rx_fetch(
                     resolved_args, resolved_kwargs = (), {}
 
                 force_refresh = cast(bool, resolved_kwargs.get("force_refresh", False))
+                # Changed to False by default
+                cache_only = cast(bool, resolved_kwargs.get("cache_only", False))
 
                 cache_kwargs = {
                     k: v
                     for k, v in resolved_kwargs.items()
-                    if k not in ("blocking", "force_refresh")
+                    if k not in ("blocking", "force_refresh", "cache_only")
                 }
                 cache_key = (
                     tuple(_make_hashable(a) for a in resolved_args),
                     frozenset((k, _make_hashable(v)) for k, v in cache_kwargs.items()),
                 )
 
-                def fetch_work() -> Optional[tuple[T, Any]]:
-                    # 1. Cache Hit & TTL Check
-                    if use_cache and not force_refresh and cache_key in cache_store:
-                        cached_time, cached_value = cache_store[cache_key]
-                        if time.monotonic() - cached_time < ttl:
-                            return cached_value
-
-                    # 2. Cache Miss / Expired / Force Refresh
+                def do_fetch() -> Optional[tuple[T, Any]]:
                     raw_data = func(*resolved_args, **resolved_kwargs)  # type: ignore
                     parsed = (
                         (adapter.validate_python(raw_data), raw_data)
                         if raw_data
                         else None
                     )
-
-                    # 3. Store in cache with current timestamp
-                    if use_cache:
-                        cache_store[cache_key] = (time.monotonic(), parsed)
+                    _set_cache(
+                        cache_key, resolved_args, resolved_kwargs, raw_data, parsed
+                    )
                     return parsed
 
-                return rx.from_callable(fetch_work).pipe(
+                if force_refresh:
+                    return rx.from_callable(do_fetch).pipe(
+                        operators.subscribe_on(scheduler or thread_pool_scheduler)
+                    )
+
+                has_valid_cache, cached_val = _get_cache(
+                    cache_key, resolved_args, resolved_kwargs
+                )
+
+                if cache_only and has_valid_cache:
+                    return rx.just(cached_val)
+
+                fetch_obs = rx.from_callable(do_fetch).pipe(
                     operators.subscribe_on(scheduler or thread_pool_scheduler)
                 )
+
+                if not cache_only and has_valid_cache:
+                    return rx.concat(rx.just(cached_val), fetch_obs)
+
+                return fetch_obs
 
             return trigger.pipe(
                 operators.switch_map(create_fetch_observable),
@@ -194,11 +324,6 @@ def rx_fetch(
 
 
 def unwrap(val: RxVal[V]) -> V:
-    """
-    Bypasses static type errors for arguments intercepted by @rx_fetch.
-    At runtime, @rx_fetch ensures this is already the raw value (V).
-    """
-    # Ensure that the value is not an Observable
     if isinstance(val, Observable):
         raise ValueError("unwrap() should only be called on non-Observable values.")
     return val
@@ -208,7 +333,6 @@ class YTClient:
     def __init__(self, api: ytmusicapi.YTMusic):
         self.api = api
 
-    # 4. Add `*, blocking: bool = False` back to the signatures so your IDE knows it exists
     @rx_fetch(SongDetail)
     def get_song(
         self,
@@ -217,6 +341,7 @@ class YTClient:
         *,
         force_refresh: bool = False,
         blocking: bool = False,
+        cache_only: bool = False,
     ) -> Optional[dict]:
 
         raw = self.api.get_song(unwrap(video_id), unwrap(signature_timestamp))
@@ -240,6 +365,7 @@ class YTClient:
         *,
         force_refresh: bool = False,
         blocking: bool = False,
+        cache_only: bool = False,
     ) -> Optional[dict]:
         return self.api.get_playlist(
             unwrap(playlist_id),
@@ -259,6 +385,7 @@ class YTClient:
         *,
         force_refresh: bool = False,
         blocking: bool = False,
+        cache_only: bool = False,
     ) -> Optional[dict]:
         logging.debug(
             f"Client: Getting watch playlist: {unwrap(video_id)}, {unwrap(playlist_id)}"
@@ -283,6 +410,7 @@ class YTClient:
         *,
         blocking: bool = False,
         force_refresh: bool = False,
+        cache_only: bool = False,
     ) -> Optional[dict]:
         from lib.net.utils import get_audio_file
 
@@ -298,6 +426,7 @@ class YTClient:
         *,
         blocking: bool = False,
         force_refresh: bool = False,
+        cache_only: bool = False,
     ) -> Optional[list]:
         return self.api.get_home(limit=unwrap(limit))
 
@@ -311,7 +440,8 @@ class YTClient:
     ) -> Optional[dict]:
         return self.api.get_album(unwrap(browse_id))
 
-    @rx_fetch(RateSongResponse, use_cache=False)
+    # Disabled disk caching here since it's an action, not persistent data retrieval
+    @rx_fetch(RateSongResponse, use_cache=False, disk_cache=False)
     def rate_song(
         self,
         video_id: RxVal[str],
@@ -319,6 +449,7 @@ class YTClient:
         *,
         blocking: bool = False,
         force_refresh: bool = False,
+        cache_only: bool = False,
     ) -> Optional[dict]:
         logging.debug(
             f"Client: Rating song {unwrap(video_id)} as {unwrap(cast(RxVal[LikeStatus], rating))}"
@@ -335,12 +466,14 @@ class YTClient:
         *,
         blocking: bool = False,
         force_refresh: bool = False,
+        cache_only: bool = False,
     ) -> Optional[list[dict]]:
         res = self.api.get_library_playlists(limit=unwrap(limit))
 
         return res
 
-    @rx_fetch(HTTPResponse, use_cache=False)
+    # Disabled disk caching here since HTTP responses cannot be safely pickled
+    @rx_fetch(HTTPResponse, use_cache=False, disk_cache=False)
     def add_history_item(
         self,
         song: RxVal[SongDetail],
@@ -362,6 +495,7 @@ class YTClient:
         *,
         blocking: bool = False,
         force_refresh: bool = False,
+        cache_only: bool = False,
     ) -> Optional[list[dict]]:
         res = self.api.search(
             unwrap(query),

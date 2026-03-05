@@ -16,3 +16,5 @@ __pycache__/
 dist/
 *.json
 サイエンス (feat. 重音テト) \[HFYhFpdE10E\].webm
+*.db-shm
+*.db-wal
