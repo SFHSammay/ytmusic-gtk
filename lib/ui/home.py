@@ -266,14 +266,23 @@ def HomeItemCard(
                 return
 
         if item.video_id:
-            if item.playlist_id:
-                logging.info(f"Playing song with playlist: {item.title}")
-                start_play(
-                    state=player_state,
-                    playlist_id=item.playlist_id,
-                    video_id=item.video_id,
-                )
-                return
+            logging.info(f"Playing song with playlist: {item.title}")
+            placeholder_music = MediaStatus(
+                id=item.video_id,
+                title=item.title,
+                artist=item.artists[0].name if item.artists else None,
+                album_name=item.album.name if item.album else None,
+                album_art=item.thumbnails[-1].url if item.thumbnails else None,
+                like_status=BehaviorSubject("INDIFFERENT"),
+            )
+
+            start_play(
+                state=player_state,
+                playlist_id=item.playlist_id,
+                video_id=item.video_id,
+                placeholder_music=placeholder_music,
+            )
+            return
         if item.audio_playlist_id:
             logging.info(
                 f"Playing album/single via audioPlaylistId: {item.audio_playlist_id}"

@@ -125,13 +125,18 @@ def start_play(
     if not video_id and not playlist_id:
         logging.warning("No video_id nor playlist_id provided.")
         return
+    logging.info(f"Playing song with playlist: {playlist_id} {video_id}")
 
     state.state.on_next(PlayState.LOADING)
     if placeholder_music:
+        logging.info("Playing placeholder music")
         state.playlist.media.on_next([placeholder_music])
         state.playlist.index.on_next(0)
         state.playlist.playlist_id.on_next(None)
         state.playlist.name.on_next(None)
+        # set to paused
+        state.state.on_next(PlayState.PAUSED)
+
     playlist = client.get_watch_playlist(playlist_id=playlist_id, video_id=video_id)
 
     def on_playlist(data: Optional[tuple[WatchPlaylist, dict]]):
@@ -343,6 +348,9 @@ def setup_player(state: PlayerState) -> Gst.Element:
     def on_current(current: Optional[MediaStatus]) -> None:
         logging.info(f"Current: {current}")
         if not current or current.audio_file.value:
+            return
+        # If it paused, do nothing
+        if state.state.value == PlayState.PAUSED:
             return
 
         client = state.client
