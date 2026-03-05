@@ -37,13 +37,22 @@ class LocalAudio(BaseModel):
     path: pathlib.Path
 
 
+def _make_hashable(obj: Any) -> Any:
+    """Recursively converts mutable types to immutable types for cache hashing."""
+    if isinstance(obj, list):
+        return tuple(_make_hashable(e) for e in obj)
+    if isinstance(obj, dict):
+        return frozenset((k, _make_hashable(v)) for k, v in obj.items())
+    return obj
+
+
 def rx_fetch(
     parser: type[T] | TypeAdapter[T],
     *,
     scheduler: Optional[ThreadPoolScheduler] = None,
+    use_cache: bool = True,  # <-- Added default cache configuration
 ) -> Callable[
     [Callable[P, Any]],
-    # The return type is now strictly an Observable
     Callable[P, Observable[Optional[tuple[T, Any]]]],
 ]:
     adapter = parser if isinstance(parser, TypeAdapter) else TypeAdapter(parser)
@@ -51,6 +60,10 @@ def rx_fetch(
     def decorator(
         func: Callable[P, Any],
     ) -> Callable[P, Observable[Optional[tuple[T, Any]]]]:
+
+        # Method-level cache store
+        cache_store: dict[tuple, Optional[tuple[T, Any]]] = {}
+
         @wraps(func)
         def wrapper(
             *args: P.args, **kwargs: P.kwargs
@@ -61,18 +74,38 @@ def rx_fetch(
                 isinstance(v, Observable) for v in kwargs.values()
             )
 
-            # 1. Synchronous Path: Wrap the result in rx.just to keep the return type consistent
+            # --- Synchronous Path ---
             if blocking:
                 if has_observable:
                     raise ValueError("Cannot use blocking=True with Observables.")
+
+                force_refresh = cast(bool, kwargs.get("force_refresh", False))
+
+                # The key is built entirely from the input arguments
+                cache_kwargs = {
+                    k: v
+                    for k, v in kwargs.items()
+                    if k not in ("blocking", "force_refresh")
+                }
+                cache_key = (
+                    tuple(_make_hashable(a) for a in args),
+                    frozenset((k, _make_hashable(v)) for k, v in cache_kwargs.items()),
+                )
+
+                # Return cached value if caching is enabled, we aren't forcing a refresh, and it exists
+                if use_cache and not force_refresh and cache_key in cache_store:
+                    return rx.just(cache_store[cache_key])
 
                 raw_data = func(*args, **kwargs)
                 parsed = (
                     (adapter.validate_python(raw_data), raw_data) if raw_data else None
                 )
+
+                if use_cache:
+                    cache_store[cache_key] = parsed
                 return rx.just(parsed)
 
-            # 2. Reactive Path
+            # --- Reactive Path ---
             obs_args = [a if isinstance(a, Observable) else rx.just(a) for a in args]
             kwarg_keys = list(kwargs.keys())
             obs_kwargs = [
@@ -83,7 +116,6 @@ def rx_fetch(
             all_observables = cast(list[Observable[Any]], obs_args + obs_kwargs)
 
             if all_observables:
-                # Type ignore required for unpacking into overloads
                 trigger = cast(
                     Observable[tuple[Any, ...]],
                     rx.combine_latest(*all_observables),  # type: ignore
@@ -100,13 +132,37 @@ def rx_fetch(
                 else:
                     resolved_args, resolved_kwargs = (), {}
 
+                # Extract force_refresh from the resolved observable values
+                force_refresh = cast(bool, resolved_kwargs.get("force_refresh", False))
+
+                # The key is built entirely from the resolved input arguments
+                cache_kwargs = {
+                    k: v
+                    for k, v in resolved_kwargs.items()
+                    if k not in ("blocking", "force_refresh")
+                }
+                cache_key = (
+                    tuple(_make_hashable(a) for a in resolved_args),
+                    frozenset((k, _make_hashable(v)) for k, v in cache_kwargs.items()),
+                )
+
                 def fetch_work() -> Optional[tuple[T, Any]]:
+                    # 1. Cache Hit
+                    if use_cache and not force_refresh and cache_key in cache_store:
+                        return cache_store[cache_key]
+
+                    # 2. Cache Miss or Force Refresh (or cache disabled)
                     raw_data = func(*resolved_args, **resolved_kwargs)  # type: ignore
-                    return (
+                    parsed = (
                         (adapter.validate_python(raw_data), raw_data)
                         if raw_data
                         else None
                     )
+
+                    # 3. Store in cache if enabled
+                    if use_cache:
+                        cache_store[cache_key] = parsed
+                    return parsed
 
                 return rx.from_callable(fetch_work).pipe(
                     operators.subscribe_on(scheduler or thread_pool_scheduler)
@@ -114,7 +170,6 @@ def rx_fetch(
 
             return trigger.pipe(
                 operators.switch_map(create_fetch_observable),
-                # Start with None so subscribers get an immediate emission while loading
                 operators.start_with(cast(Optional[tuple[T, Any]], None)),
             )
 
@@ -145,6 +200,7 @@ class YTClient:
         video_id: RxVal[str],
         signature_timestamp: RxVal[Optional[int]] = None,
         *,
+        force_refresh: bool = False,
         blocking: bool = False,
     ) -> Optional[dict]:
 
@@ -162,6 +218,7 @@ class YTClient:
         related: RxVal[bool] = False,
         suggestions_limit: RxVal[int] = 0,
         *,
+        force_refresh: bool = False,
         blocking: bool = False,
     ) -> Optional[dict]:
         return self.api.get_playlist(
@@ -180,6 +237,7 @@ class YTClient:
         radio: RxVal[bool] = False,
         shuffle: RxVal[bool] = False,
         *,
+        force_refresh: bool = False,
         blocking: bool = False,
     ) -> Optional[dict]:
         logging.debug(
@@ -200,7 +258,11 @@ class YTClient:
 
     @rx_fetch(LocalAudio, scheduler=download_scheduler)
     def get_audio_file(
-        self, video_id: RxVal[str], *, blocking: bool = False
+        self,
+        video_id: RxVal[str],
+        *,
+        blocking: bool = False,
+        force_refresh: bool = False,
     ) -> Optional[dict]:
         from lib.net.utils import get_audio_file
 
@@ -211,7 +273,11 @@ class YTClient:
 
     @rx_fetch(HomePageTypeAdapter)
     def get_home(
-        self, limit: RxVal[int] = 100, *, blocking: bool = False
+        self,
+        limit: RxVal[int] = 100,
+        *,
+        blocking: bool = False,
+        force_refresh: bool = False,
     ) -> Optional[list]:
         return self.api.get_home(limit=unwrap(limit))
 
@@ -221,12 +287,18 @@ class YTClient:
         browse_id: RxVal[str],
         *,
         blocking: bool = False,
+        force_refresh: bool = False,
     ) -> Optional[dict]:
         return self.api.get_album(unwrap(browse_id))
 
-    @rx_fetch(RateSongResponse)
+    @rx_fetch(RateSongResponse, use_cache=False)
     def rate_song(
-        self, video_id: RxVal[str], rating: RxVal[LikeStatus], *, blocking: bool = False
+        self,
+        video_id: RxVal[str],
+        rating: RxVal[LikeStatus],
+        *,
+        blocking: bool = False,
+        force_refresh: bool = False,
     ) -> Optional[dict]:
         logging.debug(
             f"Client: Rating song {unwrap(video_id)} as {unwrap(cast(RxVal[LikeStatus], rating))}"
