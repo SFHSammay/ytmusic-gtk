@@ -3,7 +3,7 @@ import logging
 from reactivex.operators import take
 from reactivex import Observable
 from lib.net.client import YTClient
-from lib.ui.play_view import NowPlayingView
+from lib.ui.now_playing import NowPlayingView
 from lib.ui.search_bar import create_search_bar
 from reactivex.subject import BehaviorSubject
 import logging

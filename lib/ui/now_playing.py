@@ -44,7 +44,7 @@ def NowPlayingView(
     art_widget.set_halign(Gtk.Align.FILL)
     art_widget.set_valign(Gtk.Align.FILL)
 
-    # 1. Force a perfect 1:1 square, ignoring the image's actual dimensions
+    # Force a perfect 1:1 square, ignoring the image's actual dimensions
     aspect_frame = Gtk.AspectFrame(ratio=1.0, obey_child=False)
     aspect_frame.set_child(art_widget)
     aspect_frame.set_halign(Gtk.Align.CENTER)
@@ -53,9 +53,21 @@ def NowPlayingView(
     aspect_frame.set_vexpand(True)
 
     # 2. Wrap it in a clamp so it never exceeds a specific width
-    art_clamp = Adw.Clamp(orientation=Gtk.Orientation.HORIZONTAL)
-    art_clamp.set_maximum_size(400)  # Adjust this max width to fit your design
-    art_clamp.set_child(aspect_frame)
+    art_clamp_h = Adw.Clamp(orientation=Gtk.Orientation.HORIZONTAL)
+    art_clamp_h.set_maximum_size(240)  # Adjust this max width to fit your design
+    art_clamp_h.set_child(aspect_frame)
+    art_clamp_h.set_halign(Gtk.Align.CENTER)
+    art_clamp_h.set_hexpand(True)
+    art_clamp_h.set_valign(Gtk.Align.CENTER)
+    art_clamp_h.set_vexpand(True)
+
+    art_claim_v = Adw.Clamp(orientation=Gtk.Orientation.VERTICAL)
+    art_claim_v.set_maximum_size(240)  # Adjust this max height to fit your design
+    art_claim_v.set_child(art_clamp_h)
+    art_claim_v.set_valign(Gtk.Align.CENTER)
+    art_claim_v.set_vexpand(True)
+    art_claim_v.set_halign(Gtk.Align.CENTER)
+    art_claim_v.set_hexpand(True)
 
     click_ctrl = Gtk.GestureClick.new()
 
@@ -68,8 +80,7 @@ def NowPlayingView(
 
     click_ctrl.connect("pressed", toggle_play)
 
-    # You can attach the click controller directly to the clamp or aspect frame
-    art_clamp.add_controller(click_ctrl)
+    art_clamp_h.add_controller(click_ctrl)
 
     title_label = Gtk.Label(
         label="<span size='x-large' weight='bold'>Loading...</span>", use_markup=True
@@ -91,7 +102,9 @@ def NowPlayingView(
     artist_label.set_xalign(0.5)
     artist_label.set_max_width_chars(30)
 
-    left_pane.append(art_clamp)
+    # left_pane.append(art_clamp)
+    left_pane.append(art_claim_v)
+
     left_pane.append(title_label)
     left_pane.append(artist_label)
 
@@ -150,19 +163,6 @@ def NowPlayingView(
     context_box.append(spacer)
     context_box.append(save_btn)
 
-    # # 3. Filter Chips
-    # chips_scroll = Gtk.ScrolledWindow()
-    # chips_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-    # chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-    # for chip in ["All", "Familiar", "Discover", "Popular"]:
-    #     btn = Gtk.Button(label=chip)
-    #     btn.add_css_class("pill")
-    #     if chip == "All":
-    #         btn.add_css_class("suggested-action")
-    #     chips_box.append(btn)
-
-    # chips_scroll.set_child(chips_box)
-
     # 4. Queue List
     queue_scroll = Gtk.ScrolledWindow()
     queue_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -187,7 +187,10 @@ def NowPlayingView(
     # right_pane.append(chips_scroll)
     right_pane.append(queue_scroll)
 
-    split_box.append(left_pane)
+    left_clamp = Adw.Clamp(orientation=Gtk.Orientation.HORIZONTAL)
+    left_clamp.set_maximum_size(300)
+    left_clamp.set_child(left_pane)
+    split_box.append(left_clamp)
     split_box.append(right_pane)
 
     view.set_content(split_box)
